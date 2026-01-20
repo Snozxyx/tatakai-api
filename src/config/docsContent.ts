@@ -94,4 +94,4 @@ This documentation is designed to be both human-readable and LLM-friendly.
 - **Middleware**: Pino Logging, Redis Caching, Rate Limiting.
 
 *Everything you need to build the next generation of anime apps.*
-\`;
+`;

@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import { cache } from "../../config/cache.js";
 import type { ServerContext } from "../../config/context.js";
-import { log } from "../../config/logger.js";
 
 const animeyaRouter = new Hono<ServerContext>();
 
@@ -291,7 +290,7 @@ animeyaRouter.get("/watch/:episodeId", async (c) => {
         // Use the TRPC endpoint direct approach
         const trpcUrl = `https://animeya.cc/api/trpc/episode.getEpisodeFullById?batch=1&input=${encodeURIComponent(JSON.stringify({ "0": { "json": parseInt(episodeId, 10) } }))}`;
         const response = await fetchWithRetry(trpcUrl);
-        const json = await response.json();
+        const json = await response.json() as any;
 
         const episodeData = json[0]?.result?.data?.json;
         if (!episodeData) throw new Error("Episode not found");
