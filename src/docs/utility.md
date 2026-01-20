@@ -1,74 +1,24 @@
 # Utility & Meta APIs
 
-Useful tools for building rich anime applications.
+Various utility endpoints ported from `anime-api` for quotes, facts, and image recognition.
 
-## 1. Trace.moe (Reverse Image Search)
+## 1. Random Quotes
 
-Identify anime from a screenshot.
-
-- **URL**: `/anime-api/trace`
-- **Method**: `POST`
-- **Body**: JSON
-  - `imageUrl`: URL of the image to search
-
-### 🧪 Test Module
-
-```bash
-curl -X POST "<http://localhost:4000/api/v1/anime-api/trace>" \
-     -H "Content-Type: application/json" \
-     -d '{"imageUrl": "<https://images.plurk.com/32B15UXxymfSMwKGTObY5e.jpg"}>'
-```
-
----
-
-## 2. Anime Quotes
-
-Get random quotes or quotes by a specific anime.
+Get random quotes or quotes by specific anime.
 
 - **URL**: `/anime-api/quotes/random`
+- **Method**: `GET`
 - **Query Params**: `anime` (optional)
 
 ### 🧪 Test Module
 
 ```bash
-curl -X GET "<http://localhost:4000/api/v1/anime-api/quotes/random?anime=naruto>"
+curl -X GET "http://localhost:4000/api/v1/anime-api/quotes/random?anime=Naruto"
 ```
 
----
+## 2. Anime Facts
 
-## 3. Anime Images (Nekos.best)
-
-Get high-quality anime wallpapers and reaction images.
-
-- **URL**: `/anime-api/images/:type`
-- **Path Params**: `type` (e.g., `waifu`, `neko`, `shinobu`, `cry`, `hug`, `kiss`)
-
-### 🧪 Test Module
-
-```bash
-curl -X GET "<http://localhost:4000/api/v1/anime-api/images/waifu>"
-```
-
----
-
-## 4. Waifu.im Search
-
-Advanced waifu image search with tag filtering.
-
-- **URL**: `/anime-api/waifu`
-- **Query Params**: `tags` (comma-separated, e.g., `maid,uniform`)
-
-### 🧪 Test Module
-
-```bash
-curl -X GET "<http://localhost:4000/api/v1/anime-api/waifu?tags=maid>"
-```
-
----
-
-## 5. Anime Facts
-
-Get interesting facts about popular anime series.
+Get facts about a specific anime.
 
 - **URL**: `/anime-api/facts/:anime`
 - **Method**: `GET`
@@ -77,4 +27,47 @@ Get interesting facts about popular anime series.
 
 ```bash
 curl -X GET "http://localhost:4000/api/v1/anime-api/facts/naruto"
+```
+
+## 3. Image Trace (trace.moe)
+
+Trace back an anime scene from an image URL.
+
+- **URL**: `/anime-api/trace`
+- **Method**: `POST`
+- **Body**: `{ "imageUrl": "..." }`
+
+### 🧪 Test Module
+
+```bash
+curl -X POST "http://localhost:4000/api/v1/anime-api/trace" \
+     -H "Content-Type: application/json" \
+     -d '{"imageUrl": "https://images.plurk.com/32B15UXxymfSMwKGTObY5e.jpg"}'
+```
+
+## 4. Anime Images (Nekos.best)
+
+Get various types of anime images (waifu, neko, shinobu, etc.).
+
+- **URL**: `/anime-api/images/:type`
+- **Method**: `GET`
+
+### 🧪 Test Module
+
+```bash
+curl -X GET "http://localhost:4000/api/v1/anime-api/images/neko"
+```
+
+## 5. Advanced Waifu Search (waifu.im)
+
+Search specifically for waifu images with tag filtering.
+
+- **URL**: `/anime-api/waifu`
+- **Method**: `GET`
+- **Query Params**: `tags` (optional, e.g. `maid`)
+
+### 🧪 Test Module
+
+```bash
+curl -X GET "http://localhost:4000/api/v1/anime-api/waifu?tags=maid"
 ```

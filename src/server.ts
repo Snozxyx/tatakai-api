@@ -20,7 +20,7 @@ import { cacheConfigSetter, cacheControlHeaders } from "./middleware/cache.js";
 import { hianimeRouter } from "./routes/hianime/index.js";
 import { hindiDubbedRouter } from "./routes/animehindidubbed/index.js";
 import { watchawRouter } from "./routes/watchanimeworld/index.js";
-import { consumetRouter } from "./routes/consumet/index.js";
+import { animeyaRouter } from "./routes/animeya/index.js";
 import { animeRouter } from "./routes/anime/index.js";
 import { animeApiRouter } from "./routes/anime-api/index.js";
 import { animelokRouter } from "./routes/animelok/index.js";
@@ -58,17 +58,17 @@ app.get("/version", (c) =>
 );
 
 // ========== DYNAMIC DOCS ENDPOINT ==========
-app.get("/docs/llm", async (c) => {
+app.get(`${BASE_PATH}/docs/llm`, async (c) => {
     try {
         const docsDir = path.join(process.cwd(), "src", "docs");
-        const files = ["intro.md", "hianime.md", "sdk.md", "consumet.md", "regional.md", "utility.md", "external.md"];
-        let fullContent = "# Tatakai API FULL DOCUMENTATION\n\n";
+        const files = ["intro.md", "hianime.md", "animeya.md", "sdk.md", "regional.md", "utility.md", "external.md"];
+        let fullContent = "Tatakai API — FULL DOCUMENTATION\n\n";
 
-        fullContent += "> **SYSTEM NOTE**: This document contains the complete API reference for Tatakai API. Use this context to generate code or answer questions about the API.\n\n---\n\n";
+        fullContent += "NOTE: This document concatenates all documentation files. Each file is delimited with BEGIN/END markers to help LLM consumption.\n\n";
 
         for (const file of files) {
             const content = fs.readFileSync(path.join(docsDir, file), "utf-8");
-            fullContent += `\n\n# MODULE: ${file.toUpperCase()}\n\n${content}\n\n---\n`;
+            fullContent += `\n=== BEGIN FILE: ${file} ===\n\n${content}\n\n=== END FILE: ${file} ===\n`;
         }
 
         return c.text(fullContent);
@@ -80,18 +80,34 @@ app.get("/docs/llm", async (c) => {
 app.get("/docs-content/:section", async (c) => {
     const section = c.req.param("section");
     // Secure filepath to prevent directory traversal
-    const safeSections = ["intro", "hianime", "sdk", "consumet", "regional", "utility", "external"];
+    const safeSections = ["intro", "hianime", "anikai", "animeya", "sdk", "regional", "utility", "external", "llm"];
 
     if (!safeSections.includes(section)) {
         return c.json({ error: "Invalid section" }, 404);
     }
 
     try {
-        console.log(`[DEBUG] Loading docs section: ${section}`);
-        const filePath = path.join(process.cwd(), "src", "docs", `${section}.md`);
-        console.log(`[DEBUG] File path: ${filePath}`);
-        const content = fs.readFileSync(filePath, "utf-8");
-        return c.json({ content });
+        if (section === "llm") {
+            // Generate LLM-friendly concatenated documentation
+            const docsDir = path.join(process.cwd(), "src", "docs");
+            const files = ["intro.md", "hianime.md", "anikai.md", "animeya.md", "sdk.md", "regional.md", "utility.md", "external.md"];
+            let fullContent = "Tatakai API — FULL DOCUMENTATION\n\n";
+
+            fullContent += "NOTE: This document concatenates all documentation files. Each file is delimited with BEGIN/END markers to help LLM consumption.\n\n";
+
+            for (const file of files) {
+                const content = fs.readFileSync(path.join(docsDir, file), "utf-8");
+                fullContent += `\n=== BEGIN FILE: ${file} ===\n\n${content}\n\n=== END FILE: ${file} ===\n`;
+            }
+
+            return c.json({ content: fullContent });
+        } else {
+            console.log(`[DEBUG] Loading docs section: ${section}`);
+            const filePath = path.join(process.cwd(), "src", "docs", `${section}.md`);
+            console.log(`[DEBUG] File path: ${filePath}`);
+            const content = fs.readFileSync(filePath, "utf-8");
+            return c.json({ content });
+        }
     } catch (error) {
         console.error(`[DEBUG] Failed to load docs: ${error}`);
         log.error(`Failed to load docs section ${section}: ${error}`);
@@ -222,9 +238,13 @@ Introduction
             <svg class="w-4 h-4 text-blue-400/80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"> <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /> </svg>
 HiAnime
     </button>
-    <button onclick="loadSection('consumet')" class="sidebar-link w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-zinc-400 border border-transparent hover:bg-zinc-900 hover:text-zinc-200 transition-all flex items-center gap-3">
+    <button onclick="loadSection('anikai')" class="sidebar-link w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-zinc-400 border border-transparent hover:bg-zinc-900 hover:text-zinc-200 transition-all flex items-center gap-3">
         <svg class="w-4 h-4 text-purple-400/80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"> <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /> <polyline points="3.27 6.96 12 12.01 20.73 6.96" /> <line x1="12" y1="22.08" x2="12" y2="12" /> </svg>
-Consumet
+Anikai
+    </button>
+    <button onclick="loadSection('animeya')" class="sidebar-link w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-zinc-400 border border-transparent hover:bg-zinc-900 hover:text-zinc-200 transition-all flex items-center gap-3">
+        <svg class="w-4 h-4 text-yellow-400/80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"> <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /> </svg>
+Animeya
     </button>
     <button onclick="loadSection('regional')" class="sidebar-link w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-zinc-400 border border-transparent hover:bg-zinc-900 hover:text-zinc-200 transition-all flex items-center gap-3">
         <svg class="w-4 h-4 text-green-400/80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"> <circle cx="12" cy="12" r="10" /> <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" /> <path d="M2 12h20" /> </svg>
@@ -244,9 +264,10 @@ Utility
             <svg class="w-4 h-4 text-brand-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"> <path d="M20 7h-9l-3-3H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16c1.1 0 2-.9 2-2V9c0-1.1-.9-2-2-2z" /> <path d="M12 11v6" /> <path d="M9 14h6" /> </svg>
                         NPM SDK
     </button>
-    <a href="/docs/llm" target="_blank" class="block px-3 py-2 rounded-lg text-[10px] font-mono text-zinc-600 hover:text-brand-400 tracking-wider transition-colors pt-4">
-                        & lbrace; RAW LLM CTX & rbrace;
-</a>
+    <button onclick="loadSection('llm')" class="sidebar-link w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-zinc-400 border border-transparent hover:bg-zinc-900 hover:text-zinc-200 transition-all flex items-center gap-3">
+        <svg class="w-4 h-4 text-red-400/80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"> <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /> </svg>
+LLM Context
+    </button>
     </nav>
 
     <div class="p-5 border-t border-zinc-900 bg-[#050505]">
@@ -341,7 +362,7 @@ Utility
                                                                     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"> </script>
                                                                         <script>
 // Navigation Logic
-const sections=['intro', 'hianime', 'consumet', 'regional', 'external', 'utility', 'sdk'];
+const sections=['intro', 'hianime', 'anikai', 'animeya', 'regional', 'external', 'utility', 'sdk'];
 let currentSection='${sectionParam}';
 
 const searchInput=document.getElementById('searchInput');
@@ -589,13 +610,13 @@ app.get("/", (c) =>
 app.use(cacheConfigSetter(BASE_PATH.length));
 
 // ========== API ROUTES ==========
-app.basePath(BASE_PATH).route("/hianime", hianimeRouter);
-app.basePath(BASE_PATH).route("/consumet", consumetRouter);
-app.basePath(BASE_PATH).route("/hindidubbed", hindiDubbedRouter);
-app.basePath(BASE_PATH).route("/watchaw", watchawRouter);
-app.basePath(BASE_PATH).route("/anime", animeRouter);
-app.basePath(BASE_PATH).route("/anime-api", animeApiRouter);
-app.basePath(BASE_PATH).route("/animelok", animelokRouter);
+app.route(`${BASE_PATH}/hianime`, hianimeRouter);
+app.route(`${BASE_PATH}/hindidubbed`, hindiDubbedRouter);
+app.route(`${BASE_PATH}/watchaw`, watchawRouter);
+app.route(`${BASE_PATH}/animeya`, animeyaRouter);
+app.route(`${BASE_PATH}/anime`, animeRouter);
+app.route(`${BASE_PATH}/anime-api`, animeApiRouter);
+app.route(`${BASE_PATH}/animelok`, animelokRouter);
 
 // ========== ERROR HANDLING ==========
 app.notFound(notFoundHandler);

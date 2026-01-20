@@ -26,6 +26,7 @@
 ## Quick Start
 
 ### Prerequisites
+
 - Node.js >= 18
 - npm or yarn
 - Redis (optional, for distributed caching)

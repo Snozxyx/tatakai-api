@@ -5,7 +5,7 @@ Welcome to the **Tatakai API** - A unified, high-performance anime and entertain
 This documentation is designed to be both human-readable and LLM-friendly.
 
 ## 🚀 Base URL
-\`http://localhost:4000/api/v1\`
+\`http://tatakaiapi.gabhasti.tech/api/v1\`
 
 ---
 
@@ -15,91 +15,83 @@ This documentation is designed to be both human-readable and LLM-friendly.
 | Method | Endpoint | Description |
 |:-------|:---------|:------------|
 | \`GET\` | \`/hianime/home\` | Dashboard data: Trending, Spotlight, Latest, Upcoming. |
-| \`GET\` | \`/hianime/info/:id\` | Full metadata for a specific anime (id example: \`one-piece-37\`). |
+| \`GET\` | \`/hianime/info/:id\` | Full metadata for a specific anime. |
 | \`GET\` | \`/hianime/episodes/:id\` | List all episodes for an anime. |
 | \`GET\` | \`/hianime/episode/sources\` | **Params**: \`animeEpisodeId\`, \`server\`, \`category\`. Get video links. |
 | \`GET\` | \`/hianime/search\` | **Params**: \`q\`, \`page\`. Comprehensive filters available. |
 | \`GET\` | \`/hianime/search/suggestion\` | **Params**: \`q\`. Quick search suggestions. |
 | \`GET\` | \`/hianime/genre/:name\` | Get animes by genre (e.g., \`action\`, \`shounen\`). |
 | \`GET\` | \`/hianime/category/:name\` | Get by category (e.g., \`most-popular\`, \`tv\`). |
+| \`GET\` | \`/hianime/producer/:name\` | Get animes by producer. |
+| \`GET\` | \`/hianime/azlist/:sort\` | **Params**: \`page\`. Browse A-Z list (\`all\`, \`0-9\`, \`a\`). |
 | \`GET\` | \`/hianime/schedule\` | **Params**: \`date\`, \`tzOffset\`. Anime airing schedule. |
 | \`GET\` | \`/hianime/qtip/:id\` | Quick tooltip info for an anime. |
-| \`GET\` | \`/hianime/azlist\` | **Params**: \`sort\`, \`page\`. A-Z sorted list. |
 
 ---
 
-## 📂 2. Consumet Multi-Source Hub
-*Multi-provider integration for Anime, Manga, Novels, and Comics.*
-
-### 📺 Anime providers
-Providers: \`gogoanime\`, \`zoro\`, \`enime\`, \`animepahe\`, \`9anime\`
+## 📂 2. Animeya Scraper (New)
+*High-performance scraper for ad-free anime streaming with Next.js parsing.*
 
 | Method | Endpoint | Description |
 |:-------|:---------|:------------|
-| \`GET\` | \`/consumet/anime/:provider/:query\` | Search anime via specified provider. |
-| \`GET\` | \`/consumet/anime/:provider/info/:id\` | Get anime details and episode list. |
-| \`GET\` | \`/consumet/anime/:provider/watch/:epId\` | **Query**: \`server\`. Fetch streaming links. |
-| \`GET\` | \`/consumet/anime/gogoanime/recent-episodes\` | Latest releases on GogoAnime. |
-
-### 📖 Manga & Comics
-Providers: \`mangadex\`, \`mangahere\`, \`mangakakalot\`, \`mangapark\`, \`getComics\`
-
-| Method | Endpoint | Description |
-|:-------|:---------|:------------|
-| \`GET\` | \`/consumet/manga/:provider/:query\` | Search manga titles. |
-| \`GET\` | \`/consumet/manga/:provider/info/:id\` | Manga details and chapter list. |
-| \`GET\` | \`/consumet/manga/:provider/read/:chId\` | Fetch image pages for a chapter. |
-| \`GET\` | \`/consumet/comics/getComics/:query\` | Search Western comics. |
-
-### 📰 Other Consumet
-| Method | Endpoint | Description |
-|:-------|:---------|:------------|
-| \`GET\` | \`/consumet/news/ann\` | Latest feeds from Anime News Network. |
-| \`GET\` | \`/consumet/light-novels/read_light_novels/:q\` | Search Light Novels. |
+| \`GET\` | \`/animeya/home\` | Featured and trending anime. |
+| \`GET\` | \`/animeya/search\` | **Params**: \`q\`. |
+| \`GET\` | \`/animeya/info/:slug\` | Full details and episode list. |
+| \`GET\` | \`/animeya/watch/:episodeId\` | Direct video sources (Embeds). |
 
 ---
 
 ## 📂 3. Regional Scrapers (Hindi, Tamil, Telugu)
-*Specialized regional content with localized metadata.*
+*Specialized content for Indian regional languages.*
 
-| Scraper | Endpoint | Features |
-|:--------|:---------|:---------|
-| **Animelok** | \`/animelok/home\` | Sections (\`Hindi Dubbed\`, \`Recent\`), Schedule, Info. |
-| | \`/animelok/watch/:id?ep=1\` | Specialized regional video sources. |
-| **WatchAW** | \`/watchaw/episode?id={slug}\` | **Proxy Enabled**. High-reliability regional sources. |
-| | \`/watchaw/search?q={query}\` | Search specifically for regional dubs. |
-| **HindiDub** | \`/hindidubbed/home\` | Classic Hindi dubbed anime provider. |
-| | \`/hindidubbed/anime/:slug\` | Multi-server Hindi streaming links. |
+### 🟠 Animelok
+| Method | Endpoint | Description |
+|:-------|:---------|:------------|
+| \`GET\` | \`/animelok/home\` | Regional home page. |
+| \`GET\` | \`/animelok/watch/:id\` | **Params**: \`ep\`. Regional streaming sources. |
+
+### 🟢 WatchAnimeWorld
+| Method | Endpoint | Description |
+|:-------|:---------|:------------|
+| \`GET\` | \`/watchaw/episode\` | **Params**: \`id\`. High-reliability proxy for regional dubs. |
+
+### 🔵 HindiDubbed
+| Method | Endpoint | Description |
+|:-------|:---------|:------------|
+| \`GET\` | \`/hindidubbed/home\` | Latest dubbed releases. |
+| \`GET\` | \`/hindidubbed/search\` | **Params**: \`title\`. |
+| \`GET\` | \`/hindidubbed/category/:name\` | Browse categories (\`hindi-anime-movies\`, etc). |
+| \`GET\` | \`/hindidubbed/anime/:slug\` | Get streaming links. |
 
 ---
 
-## 📂 4. Utility & Meta (anime-api ports)
-*Anime quotes, facts, and vision-based utilities.*
+## 📂 4. Utility & Meta
+*Useful tools and fun endpoints.*
 
-| Method | Endpoint | Params / Description |
-|:-------|:---------|:---------------------|
-| \`GET\` | \`/anime-api/quotes/random\` | **Query**: \`anime\`. Get random or anime-specific quotes. |
-| \`GET\` | \`/anime-api/images/:type\` | **Path**: \`waifu\`, \`neko\`, \`shinobu\`, etc. Get wallpapers. |
-| \`GET\` | \`/anime-api/waifu\` | **Query**: \`tags\`. Advanced waifu image search. |
-| \`GET\` | \`/anime-api/facts/:anime\` | Interesting facts about a specific anime. |
-| \`POST\` | \`/anime-api/trace\` | **Body**: \`{ \"imageUrl\": \"...\" }\`. Trace anime from screenshot. |
+| Method | Endpoint | Description |
+|:-------|:---------|:------------|
+| \`GET\` | \`/anime-api/quotes/random\` | **Query**: \`anime\`. Random quotes. |
+| \`GET\` | \`/anime-api/facts/:anime\` | Interesting facts. |
+| \`GET\` | \`/anime-api/images/:type\` | **Path**: \`waifu\`, \`neko\`, etc. |
+| \`GET\` | \`/anime-api/waifu\` | **Query**: \`tags\`. Advanced search. |
+| \`POST\` | \`/anime-api/trace\` | **Body**: \`{ "imageUrl": "..." }\`. Reverse image search. |
 
 ---
 
 ## 📂 5. External Classic Scrapers
-*Legacy scrapers for broader coverage.*
+*Legacy ports for broader coverage.*
 
-- \`GET /anime/gogoanime/:query\`
-- \`GET /anime/chia-anime/:query\`
-- \`GET /anime/anime-freak/:query\`
-- \`GET /anime/animeland/:query\`
+- \`/anime/gogoanime/:query\`
+- \`/anime/chia-anime/:query\`
+- \`/anime/anime-freak/:query\`
+- \`/anime/animeland/:query\`
 
 ---
 
 ## 🛠 Project Infrastructure
-- **System Health**: \`GET /health\` (returns \`daijoubu\`)
+- **System Health**: \`GET /health\`
 - **Version Info**: \`GET /version\`
-- **Middleware**: Logging (\`Pino\`), Caching (\`In-memory/Redis\`), Rate Limiting, CORS.
+- **Middleware**: Pino Logging, Redis Caching, Rate Limiting.
 
 *Everything you need to build the next generation of anime apps.*
-`;
+\`;

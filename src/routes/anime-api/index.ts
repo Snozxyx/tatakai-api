@@ -14,8 +14,13 @@ animeApiRouter.get("/quotes/random", async (c) => {
         : "https://animechan.xyz/api/random";
 
     const data = await cache.getOrSet(async () => {
-        const res = await fetch(url);
-        return res.json();
+        try {
+            const res = await fetch(url);
+            if (!res.ok) return { error: "API unavailable" };
+            return await res.json();
+        } catch {
+            return { error: "Failed to fetch" };
+        }
     }, cacheConfig.key, cacheConfig.duration);
 
     return c.json({ provider: "Tatakai", status: 200, data });
@@ -53,8 +58,13 @@ animeApiRouter.get("/facts/:anime", async (c) => {
     const anime = c.req.param("anime");
 
     const data = await cache.getOrSet(async () => {
-        const res = await fetch(`https://anime-facts-rest-api.herokuapp.com/api/v1/${anime}`);
-        return res.json();
+        try {
+            const res = await fetch(`https://anime-facts-rest-api.herokuapp.com/api/v1/${anime}`);
+            if (!res.ok) return { error: "API unavailable" };
+            return await res.json();
+        } catch {
+            return { error: "Failed to fetch" };
+        }
     }, cacheConfig.key, cacheConfig.duration);
 
     return c.json({ provider: "Tatakai", status: 200, data });

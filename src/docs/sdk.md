@@ -36,13 +36,7 @@ const results = await client.hianime.search("Naruto");
 - `getEpisodes(id)`: Get episodes and their streaming sources.
 - `search(query, page)`: Search for anime titles.
 
-### 2. Consumet
-
-- `anime.search(provider, query)`: Multi-provider anime search.
-- `anime.watch(provider, id)`: Get streaming links from providers.
-- `manga.search(provider, query)`: Multi-provider manga search.
-
-### 3. Utility
+### 2. Utility
 
 - `trace(imageUrl)`: Reverse image search via Trace.moe.
 - `getRandomQuote(anime)`: Get inspiring quotes.

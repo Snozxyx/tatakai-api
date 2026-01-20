@@ -80,13 +80,18 @@ animeRouter.get("/anime-freak/:query", async (c) => {
     const query = c.req.param("query");
 
     const results = await cache.getOrSet(async () => {
-        const res = await fetch(`${FREAK_URL}/search/topSearch?q=${encodeURIComponent(query)}`);
-        const json = await res.json() as any;
-        return (json.data || []).map((element: any) => ({
-            title: element.name,
-            link: element.seo_name ? `${FREAK_URL}/watch/${element.seo_name}` : null,
-            img: element.image
-        }));
+        try {
+            const res = await fetch(`${FREAK_URL}/search/topSearch?q=${encodeURIComponent(query)}`);
+            if (!res.ok) return [];
+            const json = await res.json() as any;
+            return (json.data || []).map((element: any) => ({
+                title: element.name,
+                link: element.seo_name ? `${FREAK_URL}/watch/${element.seo_name}` : null,
+                img: element.image
+            }));
+        } catch {
+            return [];
+        }
     }, cacheConfig.key, cacheConfig.duration);
 
     return c.json({ provider: "Tatakai", status: 200, data: results });

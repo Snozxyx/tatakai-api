@@ -4,14 +4,14 @@ Specialized scrapers for Indian regional languages and dubbed content.
 
 ## 1. Animelok
 
-Next-gen scraper for \`animelok.to\` using HiAnime-style IDs.
+Next-gen scraper for `animelok.to` using HiAnime-style IDs.
 
 ### Homepage
 
-- **URL**: \`/animelok/home\`
-- **Method**: \`GET\`
+- **URL**: `/animelok/home`
+- **Method**: `GET`
 
-#### 🧪 Test Module
+#### 🧪 Example Request
 
 ```bash
 curl -X GET "http://localhost:4000/api/v1/animelok/home"
@@ -19,12 +19,14 @@ curl -X GET "http://localhost:4000/api/v1/animelok/home"
 
 ### Watch Episode
 
-- **URL**: \`/animelok/watch/:id\`
-- **Query Params**: \`ep\` (default: 1)
+- **URL**: `/animelok/watch/:id`
+- **Method**: `GET`
+- **Query Params**: `ep` (episode number)
 
-#### 🧪 Test Module
+#### 🧪 Example Request
 
 ```bash
+# Watch specific episode (ep query param)
 curl -X GET "http://localhost:4000/api/v1/animelok/watch/naruto-shippuden-112233?ep=1"
 ```
 
@@ -32,20 +34,20 @@ curl -X GET "http://localhost:4000/api/v1/animelok/watch/naruto-shippuden-112233
 
 ## 2. WatchAnimeWorld (Supabase Proxy)
 
-Proxy-enabled scraper for \`watchanimeworld.in\` to bypass geoblocking.
+Proxy-enabled scraper for `watchanimeworld.in` to bypass geoblocking.
 
 ### Get Episode Sources
 
-- **URL**: \`/watchaw/episode\`
+- **URL**: `/watchaw/episode`
 - **Query Params**:
-  - \`id\`: Slug (e.g., \`naruto-shippuden-1x1\`) OR
-  - \`episodeUrl\`: Full URL
+  - `id`: Slug (e.g., `naruto-shippuden-1x1`) OR
+  - `episodeUrl`: Full URL
 
 #### 🧪 Test Module
 
-```bash
-curl -X GET "http://localhost:4000/api/v1/watchaw/episode?id=naruto-shippuden-1x1"
-```
+\`\`\`bash
+curl -X GET "<http://localhost:4000/api/v1/watchaw/episode?id=naruto-shippuden-1x1>"
+\`\`\`
 
 #### 📄 Result
 
@@ -85,15 +87,50 @@ interface WatchAnimeResponse {
 
 ## 3. AnimeHindiDubbed
 
-Classic scraper for \`animehindidubbed.in\`.
+Classic scraper for `animehindidubbed.in`.
+
+### Homepage
+
+Retrieves latest additions from the homepage.
+
+- **URL**: `/hindidubbed/home`
+- **Method**: `GET`
+
+### Category
+
+Browse anime by category (e.g., `hindi-anime-movies`, `cartoon-shows`).
+
+- **URL**: `/hindidubbed/category/:name`
+- **Method**: `GET`
+
+#### 🧪 Test Module
+
+\`\`\`bash
+curl -X GET "<http://localhost:4000/api/v1/hindidubbed/category/hindi-anime-movies>"
+\`\`\`
 
 ### Search
 
-- **URL**: \`/hindidubbed/search\`
-- **Query Params**: \`title\`
+Search for specific anime titles.
+
+- **URL**: `/hindidubbed/search`
+- **Query Params**: `title`
 
 #### 🧪 Test Module
 
 \`\`\`bash
 curl -X GET "<http://localhost:4000/api/v1/hindidubbed/search?title=doraemon>"
+\`\`\`
+
+### Anime Info
+
+Get details and server links for a specific anime.
+
+- **URL**: `/hindidubbed/anime/:slug`
+- **Method**: `GET`
+
+#### 🧪 Test Module
+
+\`\`\`bash
+curl -X GET "<http://localhost:4000/api/v1/hindidubbed/anime/doraemon-movie>"
 \`\`\`

@@ -12,11 +12,26 @@ async function fetchHtml(url: string): Promise<string> {
     const response = await fetch(url, {
         headers: {
             "User-Agent": USER_AGENT,
-            "Accept": "text/html,application/xhtml+xml",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
             "Referer": BASE_URL,
+            "Origin": BASE_URL,
         },
     });
     return response.text();
+}
+
+async function fetchApi(url: string): Promise<any> {
+    const response = await fetch(url, {
+        headers: {
+            "User-Agent": USER_AGENT,
+            "Accept": "application/json, text/plain, */*",
+            "Referer": BASE_URL,
+            "Origin": BASE_URL,
+            "X-Requested-With": "XMLHttpRequest"
+        },
+    });
+    if (!response.ok) return null;
+    return response.json();
 }
 
 // ========== HOME ==========
@@ -42,9 +57,9 @@ animelokRouter.get("/home", async (c) => {
                 const url = $(link).attr("href");
                 const id = url?.split("/").pop(); // text-123456
                 const poster = $(link).find("img").attr("src");
-                const title = $(link).find("h3").text().trim();
-                const rank = $(link).find("span").first().text().trim(); // For trending "01", "02" etc.
-                const dubBadge = $(link).find("span:contains('DUB')").length > 0 || $(link).text().includes("Dub");
+                const title = $(link).find("h3, .font-bold").first().text().trim();
+                const rank = $(link).find("span").first().text().trim();
+                const dubBadge = $(link).text().toLowerCase().includes("dub");
 
                 if (title && id) {
                     items.push({
@@ -118,17 +133,66 @@ animelokRouter.get("/languages", async (c) => {
 
         const languages: any[] = [];
 
-        $(".language-item, .lang-card, a[href*='/language/']").each((_, item) => {
-            const name = $(item).text().trim();
+        $("a[href^='/languages/']").each((_, item) => {
+            const name = $(item).find("h3").text().trim() || $(item).text().trim();
             const link = $(item).attr("href");
-            const code = link?.match(/\/language\/([^\/]+)/)?.[1];
+            const code = link?.split("/").pop();
 
             if (name && code) {
                 languages.push({ name, code, url: link });
             }
         });
 
-        return { languages };
+        // Filter unique languages
+        const uniqueLanguages = Array.from(new Map(languages.map(l => [l.code, l])).values());
+
+        return { languages: uniqueLanguages };
+    }, cacheConfig.key, cacheConfig.duration);
+
+    return c.json({ provider: "Tatakai", status: 200, data });
+});
+
+// ========== ANIME BY LANGUAGE ==========
+animelokRouter.get("/languages/:language", async (c) => {
+    const cacheConfig = c.get("CACHE_CONFIG");
+    const language = c.req.param("language");
+    const page = c.req.query("page") || "1";
+
+    const data = await cache.getOrSet(async () => {
+        const html = await fetchHtml(`${BASE_URL}/languages/${language}?page=${page}`);
+        const $ = cheerio.load(html);
+
+        const anime: any[] = [];
+
+        $("a[href^='/anime/']").each((_, item) => {
+            const title = $(item).find("h3").text().trim();
+            const poster = $(item).find("img").attr("src") || $(item).find("img").attr("data-src");
+            const url = $(item).attr("href");
+            const id = url?.split("/").pop();
+
+            // Metadata extraction
+            const meta: string[] = [];
+            $(item).find("span").each((_, s) => {
+                const text = $(s).text().trim();
+                if (text && !text.includes(title)) meta.push(text);
+            });
+
+            if (title && id) {
+                anime.push({
+                    id,
+                    title,
+                    poster,
+                    url,
+                    meta: meta.length > 0 ? meta : undefined
+                });
+            }
+        });
+
+        // Pagination info
+        const hasNextPage = $(".flex.items-center.justify-center button:contains('Next'), .flex.items-center.justify-center a:contains('Next')").length > 0 ||
+            $(".flex.items-center.justify-center button").last().text().trim() === ">";
+
+        return { language, page: parseInt(page), anime, hasNextPage };
     }, cacheConfig.key, cacheConfig.duration);
 
     return c.json({ provider: "Tatakai", status: 200, data });
@@ -140,32 +204,32 @@ animelokRouter.get("/anime/:id", async (c) => {
     const id = c.req.param("id");
 
     const data = await cache.getOrSet(async () => {
-        const html = await fetchHtml(`${BASE_URL}/anime/${id}`);
+        const htmlPromise = fetchHtml(`${BASE_URL}/anime/${id}`);
+        const apiPromise = fetchApi(`${BASE_URL}/api/anime/${id}/episodes-range?page=0&lang=JAPANESE&pageSize=100`);
+
+        const [html, apiData] = await Promise.all([htmlPromise, apiPromise]);
         const $ = cheerio.load(html);
 
-        const title = $("h1, .anime-title").first().text().trim();
-        const description = $(".synopsis, .description, [class*='desc']").first().text().trim();
+        const title = $("h1").first().text().trim() || $("meta[property='og:title']").attr("content")?.split(" - Animelok")[0] || "";
+        const description = $(".description, .synopsis, [class*='desc'], p.text-sm").first().text().trim();
         const poster = $(".poster img, .cover img").attr("src") || $("meta[property='og:image']").attr("content");
-        const rating = $(".rating, .score").first().text().trim();
+        const rating = $(".rating, .score, .bg-white\\/20").first().text().trim();
 
-        // Extract seasons/episodes
-        const seasons: any[] = [];
-        $(".season, .episode-list").each((_, season) => {
-            const seasonTitle = $(season).find(".season-title, h3").first().text().trim() || "Season 1";
-            const episodes: any[] = [];
-
-            $(season).find(".episode, .ep-item, a[href*='ep=']").each((_, ep) => {
-                const epTitle = $(ep).text().trim();
-                const epLink = $(ep).attr("href");
-                const epNum = epLink?.match(/ep=(\d+)/)?.[1];
-
-                if (epNum) {
-                    episodes.push({ number: parseInt(epNum), title: epTitle, url: epLink });
-                }
+        // Extract seasons/episodes from API
+        const episodes: any[] = [];
+        if (apiData && apiData.episodes) {
+            apiData.episodes.forEach((ep: any) => {
+                episodes.push({
+                    number: ep.number,
+                    title: ep.name,
+                    url: `/watch/${id}?ep=${ep.number}`,
+                    image: ep.img,
+                    isFiller: ep.isFiller
+                });
             });
+        }
 
-            seasons.push({ title: seasonTitle, episodes });
-        });
+        const seasons = episodes.length > 0 ? [{ title: "Season 1", episodes }] : [];
 
         return { id, title, description, poster, rating, seasons };
     }, cacheConfig.key, cacheConfig.duration);
@@ -180,56 +244,26 @@ animelokRouter.get("/watch/:id", async (c) => {
     const ep = c.req.query("ep") || "1";
 
     const data = await cache.getOrSet(async () => {
-        const html = await fetchHtml(`${BASE_URL}/watch/${id}?ep=${ep}`);
-        const $ = cheerio.load(html);
+        const apiData = await fetchApi(`${BASE_URL}/api/anime/${id}/episodes/${ep}`);
 
-        const title = $("h1, .episode-title").first().text().trim();
+        if (!apiData || !apiData.episode) {
+            // Fallback or empty data
+            return { id, episode: ep, title: "", servers: [], subtitles: [] };
+        }
 
-        const servers: any[] = [];
-        const subtitles: any[] = [];
+        const episode = apiData.episode;
+        const title = episode.name || "";
+        const servers = (episode.servers || []).map((s: any) => ({
+            name: s.name,
+            url: s.url,
+            language: s.languages?.[0] || "Unknown",
+            tip: s.tip
+        }));
 
-        // Extract servers from data attributes or script
-        $("script").each((_, script) => {
-            const content = $(script).html() || "";
-
-            // Look for server data in scripts
-            const serverMatch = content.match(/servers\s*[:=]\s*(\[[\s\S]*?\])/);
-            if (serverMatch) {
-                try {
-                    const parsed = JSON.parse(serverMatch[1].replace(/'/g, '"'));
-                    servers.push(...parsed);
-                } catch { }
-            }
-
-            // Look for subtitle data
-            const subMatch = content.match(/subtitles?\s*[:=]\s*(\[[\s\S]*?\])/);
-            if (subMatch) {
-                try {
-                    const parsed = JSON.parse(subMatch[1].replace(/'/g, '"'));
-                    subtitles.push(...parsed);
-                } catch { }
-            }
-        });
-
-        // Fallback: extract from visible server buttons
-        $(".server-btn, .server-item, [data-server]").each((_, btn) => {
-            const name = $(btn).text().trim();
-            const serverUrl = $(btn).attr("data-src") || $(btn).attr("data-url") || $(btn).attr("href");
-            const lang = $(btn).attr("data-lang") || "Unknown";
-
-            if (name && serverUrl) {
-                servers.push({ name, url: serverUrl, language: lang });
-            }
-        });
-
-        // Extract subtitle tracks
-        $("track[kind='subtitles'], track[kind='captions']").each((_, track) => {
-            const label = $(track).attr("label") || $(track).attr("srclang");
-            const src = $(track).attr("src");
-            if (label && src) {
-                subtitles.push({ label, src });
-            }
-        });
+        const subtitles = (episode.subtitles || []).map((sub: any) => ({
+            label: sub.name,
+            src: sub.url
+        }));
 
         return { id, episode: ep, title, servers, subtitles };
     }, cacheConfig.key, cacheConfig.duration);
@@ -239,13 +273,15 @@ animelokRouter.get("/watch/:id", async (c) => {
 
 // ========== ROOT ==========
 animelokRouter.get("/", (c) => {
-    return c.json({ provider: "Tatakai",
+    return c.json({
+        provider: "Tatakai",
         status: 200,
         message: "Animelok Scraper - Hindi Dubbed Anime with HiAnime-style IDs",
         endpoints: {
             home: "/api/v1/animelok/home",
             schedule: "/api/v1/animelok/schedule",
             languages: "/api/v1/animelok/languages",
+            languageDetails: "/api/v1/animelok/languages/:language?page=1",
             anime: "/api/v1/animelok/anime/:id",
             watch: "/api/v1/animelok/watch/:id?ep=1",
         },
