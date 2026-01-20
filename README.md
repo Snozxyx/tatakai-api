@@ -1,6 +1,6 @@
 # Tatakai API 🎌
 
-> Unified Anime API combining HiAnime, Consumet, and regional scrapers with modern caching, CORS, rate limiting, and logging.
+> Unified Anime API combining HiAnime, regional scrapers, and utility APIs with modern caching, CORS, rate limiting, and logging.
 
 ## Features
 
@@ -11,14 +11,18 @@
 - 🌐 **CORS Ready**: Configurable origin whitelisting
 - 🐳 **Docker Ready**: Multi-stage Dockerfile included
 - 📦 **TypeScript**: Full type safety
+- 🧪 **Comprehensive Testing**: Built-in endpoint validation scripts
 
 ## API Endpoints
 
 | Route | Description |
 |-------|-------------|
 | `/api/v1/hianime/*` | HiAnime scraper - search, info, episodes, sources |
-| `/api/v1/consumet/*` | Consumet providers - anime, manga, movies, meta |
-| `/api/v1/hindidubbed/*` | Hindi dubbed anime scraper |
+| `/api/v1/anime/*` | External anime search providers (GogoAnime, Chia-Anime, etc.) |
+| `/api/v1/anime-api/*` | Anime utility APIs (quotes, images, facts, waifu) |
+| `/api/v1/animehindidubbed/*` | Hindi dubbed anime scraper |
+| `/api/v1/animelok/*` | AnimeLok multi-language streaming |
+| `/api/v1/animeya/*` | Animeya streaming platform |
 | `/api/v1/watchaw/*` | WatchAnimeWorld multi-language streaming |
 | `/health` | Health check |
 | `/version` | API version info |
@@ -68,20 +72,43 @@ docker run -p 4000:4000 tatakai-api
 | `RATE_LIMIT_MAX_REQUESTS` | Max requests per window | `100` |
 | `CACHE_TTL_SECONDS` | Default cache TTL | `300` |
 
+## Testing
+
+Run the comprehensive test suite to validate all API endpoints:
+
+```bash
+# Run basic validation
+npm run test
+
+# Run comprehensive endpoint tests
+npm run test:comprehensive
+```
+
+The comprehensive test script checks all routes with sample parameters and reports success/failure status for each endpoint.
+
 ## Example Requests
 
 ```bash
 # HiAnime home page
 curl http://localhost:4000/api/v1/hianime/home
 
-# Search anime
+# Search anime on HiAnime
 curl "http://localhost:4000/api/v1/hianime/search?q=naruto"
 
-# Consumet Anilist trending
-curl http://localhost:4000/api/v1/consumet/meta/anilist/trending
+# External anime search (GogoAnime)
+curl "http://localhost:4000/api/v1/anime/gogoanime/naruto"
+
+# Anime quotes
+curl "http://localhost:4000/api/v1/anime-api/quotes/random"
+
+# Anime images
+curl "http://localhost:4000/api/v1/anime-api/images/waifu"
 
 # Hindi dubbed search
 curl "http://localhost:4000/api/v1/hindidubbed/search?title=naruto"
+
+# Animeya home
+curl "http://localhost:4000/api/v1/animeya/home"
 ```
 
 ## Project Structure
@@ -93,11 +120,17 @@ TatakaiAPI/
 │   ├── middleware/   # Hono middleware (logging, cache control)
 │   ├── routes/       # API routes by provider
 │   │   ├── hianime/
-│   │   ├── consumet/
+│   │   ├── anime/
+│   │   ├── anime-api/
 │   │   ├── animehindidubbed/
+│   │   ├── animelok/
+│   │   ├── animeya/
 │   │   └── watchanimeworld/
 │   ├── server.ts     # Main entry point
 │   └── utils.ts      # Utility functions
+├── scripts/          # Utility scripts
+│   ├── comprehensive_test.ts  # Full API endpoint testing
+│   └── validate_api.ts        # API validation script
 ├── public/           # Static files
 ├── Dockerfile
 └── docker-compose.yml

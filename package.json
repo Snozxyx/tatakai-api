@@ -1,6 +1,6 @@
 {
     "name": "tatakai-api",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "Unified anime API combining HiAnime, Consumet, and regional scrapers with modern caching, CORS, rate limiting, and logging",
     "main": "dist/src/server.js",
     "type": "module",
@@ -9,6 +9,7 @@
         "dev": "tsx watch src/server.ts",
         "build": "tsc",
         "test": "npx tsx scripts/validate_api.ts",
+        "test:comprehensive": "npx tsx scripts/comprehensive_test.ts",
         "test:watch": "vitest",
         "typecheck": "tsc --noEmit",
         "format": "prettier --cache --write .",
