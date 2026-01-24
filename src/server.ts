@@ -24,6 +24,7 @@ import { animeyaRouter } from "./routes/animeya/index.js";
 import { animeRouter } from "./routes/anime/index.js";
 import { animeApiRouter } from "./routes/anime-api/index.js";
 import { animelokRouter } from "./routes/animelok/index.js";
+import { desidubanimeRouter } from "./routes/desidubanime/index.js";
 
 import pkgJson from "../package.json" with { type: "json" };
 
@@ -599,6 +600,7 @@ app.get("/", (c) =>
                 hindiDubbed: `${BASE_PATH}/hindidubbed`,
                 animelok: `${BASE_PATH}/animelok`,
                 watchaw: `${BASE_PATH}/watchaw`,
+                desidubanime: `${BASE_PATH}/desidubanime`,
             },
             meta: `${BASE_PATH}/anime-api`,
             docs: "/docs"
@@ -617,6 +619,7 @@ app.route(`${BASE_PATH}/animeya`, animeyaRouter);
 app.route(`${BASE_PATH}/anime`, animeRouter);
 app.route(`${BASE_PATH}/anime-api`, animeApiRouter);
 app.route(`${BASE_PATH}/animelok`, animelokRouter);
+app.route(`${BASE_PATH}/desidubanime`, desidubanimeRouter);
 
 // ========== ERROR HANDLING ==========
 app.notFound(notFoundHandler);
