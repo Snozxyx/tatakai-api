@@ -24,8 +24,54 @@
 | `/api/v1/animelok/*` | AnimeLok multi-language streaming |
 | `/api/v1/animeya/*` | Animeya streaming platform |
 | `/api/v1/watchaw/*` | WatchAnimeWorld multi-language streaming |
+| `/api/v1/desidubanime/*` | DesiDubAnime - Hindi/regional dubbed anime |
+| `/api/v1/aniworld/*` | AniWorld - German anime streaming (aniworld.to) |
 | `/health` | Health check |
 | `/version` | API version info |
+| `/api/v1/docs/llm` | Full LLM-friendly documentation |
+
+## Route Details
+
+### HiAnime (`/api/v1/hianime`)
+- `GET /home` - Home page with featured anime
+- `GET /search?q={query}` - Search anime
+- `GET /info/{id}` - Anime details
+- `GET /episodes/{id}` - Episode list
+- `GET /sources/{episodeId}` - Video sources
+
+### AnimeLok (`/api/v1/animelok`)
+- `GET /search?q={query}` - Search anime
+- `GET /anime/{id}/seasons` - Get seasons/episodes
+- `GET /watch/{episodeId}?ep={num}` - Get video sources
+
+### Animeya (`/api/v1/animeya`)
+- `GET /home` - Home page
+- `GET /search?q={query}` - Search anime
+- `GET /info/{id}` - Anime info with episodes
+- `GET /watch/{episodeId}` - Video sources
+
+### WatchAnimeWorld (`/api/v1/watchaw`)
+- `GET /episode?id={id}` - Get episode sources by ID
+
+### DesiDubAnime (`/api/v1/desidubanime`)
+- `GET /search?q={query}` - Search Hindi dubbed anime
+- `GET /info/{slug}` - Anime details
+- `GET /watch/{episodeSlug}` - Get video sources
+
+### AniWorld (`/api/v1/aniworld`)
+- `GET /info/{slug}` - Anime info (German)
+- `GET /watch/{slug}/episode/{num}` - Get video sources
+- `GET /search?q={query}` - Search anime
+
+### Hindi Dubbed (`/api/v1/animehindidubbed`)
+- `GET /search?title={query}` - Search Hindi dubbed anime
+- `GET /info/{id}` - Anime details
+- `GET /watch/{episodeId}` - Video sources
+
+### Anime API Utilities (`/api/v1/anime-api`)
+- `GET /quotes/random` - Random anime quote
+- `GET /images/{category}` - Anime images (waifu, neko, etc.)
+- `GET /facts` - Random anime facts
 
 ## Quick Start
 
@@ -117,21 +163,24 @@ curl "http://localhost:4000/api/v1/animeya/home"
 TatakaiAPI/
 ├── src/
 │   ├── config/       # Configuration (env, cache, cors, logger, etc.)
+│   ├── docs/         # API documentation markdown files
 │   ├── middleware/   # Hono middleware (logging, cache control)
 │   ├── routes/       # API routes by provider
-│   │   ├── hianime/
-│   │   ├── anime/
-│   │   ├── anime-api/
-│   │   ├── animehindidubbed/
-│   │   ├── animelok/
-│   │   ├── animeya/
-│   │   └── watchanimeworld/
+│   │   ├── hianime/          # HiAnime scraper
+│   │   ├── anime/            # External search providers
+│   │   ├── anime-api/        # Utility APIs
+│   │   ├── animehindidubbed/ # Hindi dubbed scraper
+│   │   ├── animelok/         # AnimeLok multi-language
+│   │   ├── animeya/          # Animeya platform
+│   │   ├── watchanimeworld/  # WatchAnimeWorld
+│   │   ├── desidubanime/     # DesiDubAnime Hindi
+│   │   └── aniworld/         # AniWorld German
 │   ├── server.ts     # Main entry point
 │   └── utils.ts      # Utility functions
 ├── scripts/          # Utility scripts
 │   ├── comprehensive_test.ts  # Full API endpoint testing
 │   └── validate_api.ts        # API validation script
-├── public/           # Static files
+├── public/           # Static files & docs UI
 ├── Dockerfile
 └── docker-compose.yml
 ```
