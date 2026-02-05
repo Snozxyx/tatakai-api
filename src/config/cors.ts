@@ -8,8 +8,15 @@ const parseOrigins = (origins: string): string[] => {
 
 const allowedOrigins = parseOrigins(env.CORS_ALLOWED_ORIGINS);
 
+// Hono's cors middleware simplifies "origin: string" vs "origin: string[]".
+// If we pass "*" as a string, it allows all. 
+// If we pass ["*"], it acts as literal match.
+// So we should verify if allowedOrigins contains "*" and if so, pass string "*".
+
+const finalOrigin = allowedOrigins.includes("*") ? "*" : allowedOrigins;
+
 export const corsConfig = cors({
-    origin: allowedOrigins,
+    origin: finalOrigin,
     allowMethods: ["GET", "POST", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
     exposeHeaders: ["X-RateLimit-Limit", "X-RateLimit-Remaining", "X-Cache-Status"],

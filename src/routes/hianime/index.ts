@@ -8,7 +8,8 @@ const hianimeRouter = new Hono<ServerContext>();
 
 // /api/v1/hianime
 hianimeRouter.get("/", (c) => {
-    return c.json({ provider: "Tatakai",
+    return c.json({
+        provider: "Tatakai",
         status: 200,
         message: "HiAnime API endpoints",
         endpoints: {
@@ -220,13 +221,17 @@ hianimeRouter.get("/episode/sources", async (c) => {
         | "dub"
         | "raw";
 
-    const data = await cache.getOrSet<HiAnime.ScrapedAnimeEpisodesSources>(
-        async () => hianime.getEpisodeSources(animeEpisodeId, server, category),
-        cacheConfig.key,
-        cacheConfig.duration
-    );
-
-    return c.json({ provider: "Tatakai", status: 200, data }, { status: 200 });
+    try {
+        const data = await cache.getOrSet<HiAnime.ScrapedAnimeEpisodesSources>(
+            async () => hianime.getEpisodeSources(animeEpisodeId, server, category),
+            cacheConfig.key,
+            cacheConfig.duration
+        );
+        return c.json({ provider: "Tatakai", status: 200, data }, { status: 200 });
+    } catch (error: any) {
+        console.error(`HiAnime sources fetch failed for ${animeEpisodeId}:`, error.message);
+        return c.json({ provider: "Tatakai", status: 404, message: "Sources not found or ID invalid", error: error.message }, { status: 404 });
+    }
 });
 
 // /api/v1/hianime/anime/{anime-id}/episodes

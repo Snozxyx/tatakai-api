@@ -124,8 +124,10 @@ async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 
                 }
             });
             if (response.ok) return response;
-            lastError = new Error(`HTTP ${response.status}: ${response.statusText}`);
+            if (response.status === 404) throw new Error("Status 404");
+            lastError = new Error(`Status ${response.status}`);
         } catch (error) {
+            if (error instanceof Error && error.message === "Status 404") throw error;
             lastError = error as Error;
         }
         if (i < retries - 1) await new Promise(resolve => setTimeout(resolve, 1000));
@@ -283,29 +285,44 @@ animeyaRouter.get("/info/:slug", async (c) => {
 
 // ========== EPISODE SOURCES ==========
 animeyaRouter.get("/watch/:episodeId", async (c) => {
-    const cacheConfig = c.get("CACHE_CONFIG");
-    const episodeId = c.req.param("episodeId");
+    try {
+        const cacheConfig = c.get("CACHE_CONFIG");
+        const episodeId = c.req.param("episodeId");
 
-    const data = await cache.getOrSet(async () => {
-        // Use the TRPC endpoint direct approach
-        const trpcUrl = `https://animeya.cc/api/trpc/episode.getEpisodeFullById?batch=1&input=${encodeURIComponent(JSON.stringify({ "0": { "json": parseInt(episodeId, 10) } }))}`;
-        const response = await fetchWithRetry(trpcUrl);
-        const json = await response.json() as any;
+        const data = await cache.getOrSet(async () => {
+            // Use the TRPC endpoint direct approach
+            const trpcUrl = `https://animeya.cc/api/trpc/episode.getEpisodeFullById?batch=1&input=${encodeURIComponent(JSON.stringify({ "0": { "json": parseInt(episodeId, 10) } }))}`;
+            const response = await fetchWithRetry(trpcUrl);
+            const json = await response.json() as any;
 
-        const episodeData = json[0]?.result?.data?.json;
-        if (!episodeData) throw new Error("Episode not found");
+            const episodeData = json[0]?.result?.data?.json;
+            if (!episodeData) throw new Error("Episode not found");
 
-        return {
-            episode: {
-                id: episodeData.id,
-                title: episodeData.title,
-                number: episodeData.episodeNumber
-            },
-            sources: episodeData.players || []
-        };
-    }, cacheConfig.key, cacheConfig.duration);
+            const sources = (episodeData.players || []).map((p: any) => ({
+                name: p.name || 'Unknown',
+                url: p.url,
+                type: p.type || (p.url.includes('.m3u8') ? 'HLS' : 'EMBED'),
+                quality: p.quality || '720p',
+                langue: p.langue || 'ENG',
+                subType: p.subType || 'NONE'
+            }));
 
-    return c.json({ provider: "Animeya", status: 200, data });
+            return {
+                episode: {
+                    id: episodeData.id,
+                    title: episodeData.title,
+                    number: episodeData.episodeNumber
+                },
+                sources
+            };
+        }, cacheConfig.key, cacheConfig.duration);
+
+        return c.json({ provider: "Animeya", status: 200, data });
+    } catch (e: any) {
+        console.error("Error in /animeya/watch:", e);
+        const status = e.message === "Status 404" || e.message === "Episode not found" ? 404 : 500;
+        return c.json({ provider: "Animeya", status, error: e.message }, status);
+    }
 });
 
 export { animeyaRouter };

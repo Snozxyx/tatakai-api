@@ -3,6 +3,7 @@ import { cache } from "../../config/cache.js";
 import type { ServerContext } from "../../config/context.js";
 import { log } from "../../config/logger.js";
 import { env } from "../../config/env.js";
+import * as cheerio from "cheerio";
 
 const watchawRouter = new Hono<ServerContext>();
 
@@ -89,7 +90,7 @@ export function parseEpisodeUrl(urlOrSlug: string): ParsedEpisodeUrl | null {
             slug = pathMatch[1];
             fullUrl = urlOrSlug;
         } else {
-            fullUrl = `https://watchanimeworld.in/episode/${slug}/`;
+            fullUrl = `https://watchanimeworld.net/episode/${slug}/`;
         }
 
         // Extract season and episode: e.g., "naruto-shippuden-1x1"
@@ -119,7 +120,7 @@ export function parseEpisodeUrl(urlOrSlug: string): ParsedEpisodeUrl | null {
 async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3): Promise<Response> {
     let lastError: Error | null = null;
 
-    for (let i = 0; i <retries; i++) {
+    for (let i = 0; i < retries; i++) {
         try {
             const response = await fetch(url, {
                 ...options,
@@ -130,7 +131,7 @@ async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 
                 return response;
             }
 
-            if (response.status >= 400 && response.status <500 && response.status !== 429) {
+            if (response.status >= 400 && response.status < 500 && response.status !== 429) {
                 // If 404, throw explicitly to avoid retrying if resource really missing
                 if (response.status === 404) throw new Error("HTTP 404: Not Found");
                 return response;
@@ -142,7 +143,7 @@ async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 
             log.warn(`Fetch attempt ${i + 1} failed: ${lastError.message}`);
         }
 
-        if (i <retries - 1) {
+        if (i < retries - 1) {
             await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 500));
         }
     }
@@ -151,38 +152,186 @@ async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 
 }
 
 
+// Direct HTML scraper for WatchAnimeWorld (fallback when Supabase unavailable)
+async function getEpisodeSourcesDirect(episodeIdentifier: string): Promise<any> {
+    const parsed = parseEpisodeUrl(episodeIdentifier);
+    if (!parsed) {
+        throw new Error("Invalid episode URL/slug format");
+    }
+
+    log.info(`Fetching WatchAnimeWorld episode directly: ${parsed.fullUrl}`);
+
+    const response = await fetchWithRetry(parsed.fullUrl, {
+        headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "text/html,application/xhtml+xml",
+            "Accept-Language": "en-US,en;q=0.9",
+        },
+    });
+
+    const html = await response.text();
+    const $ = cheerio.load(html);
+
+    const sources: ResolvedSource[] = [];
+    const subtitles: Subtitle[] = [];
+
+    // Extract iframe with player1.php data
+    const player1Match = html.match(/iframe[^>]+data-src="([^"]*\/api\/player1\.php\?data=([^"]+))"/i);
+
+    if (player1Match) {
+        const player1Data = player1Match[2];
+
+        try {
+            // Decode base64 data
+            const decoded = atob(player1Data);
+            const servers = JSON.parse(decoded);
+
+            log.info(`Found ${servers.length} servers in player1 data`);
+
+            // Process each server
+            const langCounts: Record<string, number> = {};
+            for (const server of servers) {
+                const language = server.language || 'Unknown';
+                const link = server.link || '';
+
+                if (!link) continue;
+
+                const langInfo = normalizeLanguage(language);
+                const langKey = langInfo.name.toUpperCase();
+                langCounts[langKey] = (langCounts[langKey] || 0) + 1;
+                const variant = langCounts[langKey] === 1 ? 'I' : 'II';
+
+                // Assign familiar character names
+                let charName = 'Z-Fighter';
+                if (langKey === 'HINDI') charName = 'Goku';
+                else if (langKey === 'TAMIL') charName = 'Vegeta';
+                else if (langKey === 'TELUGU') charName = 'Gohan';
+                else if (langKey === 'MALAYALAM') charName = 'Piccolo';
+                else if (langKey === 'BENGALI') charName = 'Trunks';
+                else if (langKey === 'ENGLISH') charName = 'Luffy';
+                else if (langKey === 'JAPANESE') charName = 'Zoro';
+                else charName = 'Kira';
+
+                const providerName = `${charName} ${variant} (${langInfo.code.toUpperCase()})`;
+
+                // Try to resolve the link and extract m3u8
+                try {
+                    const providerResponse = await fetchWithRetry(link, {
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                            'Referer': parsed.fullUrl,
+                        },
+                    }, 1);
+
+                    const providerHtml = await providerResponse.text();
+
+                    // Check if Cloudflare challenge
+                    if (providerHtml.includes('challenge-platform') || providerHtml.includes('Just a moment')) {
+                        sources.push({
+                            url: link,
+                            isM3U8: false,
+                            language: langInfo.name,
+                            langCode: langInfo.code,
+                            isDub: langInfo.isDub,
+                            needsHeadless: true,
+                            providerName: providerName,
+                        });
+                        continue;
+                    }
+
+                    // Extract m3u8 links
+                    const m3u8Regex = /(https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*)/gi;
+                    const m3u8Matches = providerHtml.match(m3u8Regex);
+
+                    if (m3u8Matches && m3u8Matches.length > 0) {
+                        for (const m3u8Url of m3u8Matches.slice(0, 2)) {
+                            sources.push({
+                                url: m3u8Url,
+                                isM3U8: true,
+                                language: langInfo.name,
+                                langCode: langInfo.code,
+                                isDub: langInfo.isDub,
+                                quality: 'HD',
+                                providerName: providerName,
+                            });
+                        }
+                    } else {
+                        // No direct m3u8 found, mark as needing headless
+                        sources.push({
+                            url: link,
+                            isM3U8: false,
+                            language: langInfo.name,
+                            langCode: langInfo.code,
+                            isDub: langInfo.isDub,
+                            needsHeadless: true,
+                            providerName: providerName,
+                        });
+                    }
+                } catch (error) {
+                    log.warn(`Failed to fetch provider for ${language}: ${error}`);
+                    // Add as unresolved source
+                    sources.push({
+                        url: link,
+                        isM3U8: false,
+                        language: langInfo.name,
+                        langCode: langInfo.code,
+                        isDub: langInfo.isDub,
+                        needsHeadless: true,
+                        providerName: providerName,
+                    });
+                }
+            }
+        } catch (error) {
+            log.error(`Failed to parse player1 data: ${error}`);
+        }
+    }
+
+    return {
+        headers: {
+            Referer: parsed.fullUrl,
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        },
+        sources,
+        subtitles,
+        anilistID: null,
+        malID: null,
+    };
+}
+
 async function getEpisodeSources(episodeIdentifier: string): Promise<any> {
     const parsed = parseEpisodeUrl(episodeIdentifier);
     if (!parsed) {
         throw new Error("Invalid episode URL/slug format");
     }
 
-    log.info(`Fetching WatchAnimeWorld episode via Supabase: ${parsed.slug}`);
-
-    // Proxy to Supabase Edge Function (bypasses geoblocking/timeout)
+    // Try Supabase first, fallback to direct scraping
     const SUPABASE_URL = env.SUPABASE_URL;
     const AUTH_KEY = env.SUPABASE_AUTH_KEY;
 
-    try {
-        const response = await fetchWithRetry(`${SUPABASE_URL}?episodeUrl=${parsed.slug}`, {
-            method: "POST", // Endpoint accepts POST
-            headers: {
-                "Authorization": AUTH_KEY,
-                "apikey": "sb_publishable_hiKONZyoLpTAkFpQL5DWIQ_1_OWjmj3",
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({ name: "TatakaAPI Proxy" })
-        });
+    if (SUPABASE_URL && AUTH_KEY) {
+        try {
+            log.info(`Fetching WatchAnimeWorld episode via Supabase: ${parsed.slug}`);
+            const response = await fetchWithRetry(`${SUPABASE_URL}/functions/v1/watchanimeworld-scraper?episodeUrl=${parsed.slug}`, {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${AUTH_KEY}`,
+                    "apikey": AUTH_KEY,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ name: "TatakaAPI Proxy" })
+            });
 
-        const data = await response.json();
+            const data = await response.json();
 
-        // Supabase function returns the formatted source object directly
-        return data;
-
-    } catch (error) {
-        log.error(`Supabase proxy failed: ${error}`);
-        throw new Error("Failed to fetch sources via proxy");
+            // Supabase function returns the formatted source object directly
+            return data;
+        } catch (error) {
+            log.warn(`Supabase proxy failed, trying direct scraping: ${error}`);
+        }
     }
+
+    // Fallback to direct HTML scraping
+    return getEpisodeSourcesDirect(episodeIdentifier);
 }
 
 
@@ -192,24 +341,39 @@ async function getEpisodeSources(episodeIdentifier: string): Promise<any> {
 watchawRouter.get("/home", async (c) => {
     const cacheConfig = c.get("CACHE_CONFIG");
     const data = await cache.getOrSet(async () => {
-        const response = await fetchWithRetry("https://watchanimeworld.in/", {
+        const response = await fetchWithRetry("https://watchanimeworld.net/", {
             headers: {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 "Accept": "text/html",
             },
         });
         const html = await response.text();
-        const animeCardRegex = /<a[^>]*href="([^"]*\/episode\/([^"]+))"[^>]*>[\s\S]*?<img[^>]*src="([^"]*)"[^>]*>[\s\S]*?<[^>]*>([^<]+)/gi;
+        const $ = cheerio.load(html);
         const featured: any[] = [];
-        let match;
-        while ((match = animeCardRegex.exec(html)) !== null) {
-            featured.push({
-                url: match[1],
-                slug: match[2],
-                poster: match[3],
-                title: match[4].trim(),
-            });
-        }
+
+        // Parse "Newest Drops" or similar sections
+        $(".latest-ep-swiper-slide article.post, article.post.movies").each((_, element) => {
+            const title = $(element).find(".entry-title").text().trim();
+            const link = $(element).find("a.lnk-blk").attr("href");
+            const img = $(element).find("img").attr("src") || $(element).find("img").attr("data-src") || "";
+
+            // Extract slug from URL
+            let slug = "";
+            if (link) {
+                const match = link.match(/\/series\/([^\/]+)\/?$/) || link.match(/\/episode\/([^\/]+)\/?$/);
+                if (match) slug = match[1];
+            }
+
+            if (title && slug) {
+                featured.push({
+                    title,
+                    slug,
+                    url: link,
+                    poster: img.startsWith("//") ? "https:" + img : img
+                });
+            }
+        });
+
         return { featured: featured.slice(0, 20) };
     }, cacheConfig.key, cacheConfig.duration);
     return c.json({ provider: "Tatakai", status: 200, data });
@@ -222,24 +386,38 @@ watchawRouter.get("/search", async (c) => {
     if (!query) return c.json({ provider: "Tatakai", status: 400, error: "Missing q parameter" }, 400);
 
     const data = await cache.getOrSet(async () => {
-        const response = await fetchWithRetry(`https://watchanimeworld.in/?s=${encodeURIComponent(query)}`, {
+        const response = await fetchWithRetry(`https://watchanimeworld.net/?s=${encodeURIComponent(query)}`, {
             headers: {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 "Accept": "text/html",
             },
         });
         const html = await response.text();
+        const $ = cheerio.load(html);
         const results: any[] = [];
-        const resultRegex = /<a[^>]*href="([^"]*\/episode\/([^"]+))"[^>]*>[\s\S]*?<img[^>]*src="([^"]*)"[^>]*>[\s\S]*?<[^>]*title[^>]*>([^<]+)/gi;
-        let match;
-        while ((match = resultRegex.exec(html)) !== null) {
-            results.push({
-                url: match[1],
-                slug: match[2],
-                poster: match[3],
-                title: match[4].trim(),
-            });
-        }
+
+        $("article.post").each((_, element) => {
+            const title = $(element).find(".entry-title").text().trim();
+            const link = $(element).find("a.lnk-blk").attr("href");
+            const img = $(element).find("img").attr("src") || $(element).find("img").attr("data-src") || "";
+
+            // Extract slug from URL
+            let slug = "";
+            if (link) {
+                const match = link.match(/\/series\/([^\/]+)\/?$/) || link.match(/\/episode\/([^\/]+)\/?$/);
+                if (match) slug = match[1];
+            }
+
+            if (title && slug) {
+                results.push({
+                    title,
+                    slug,
+                    url: link,
+                    poster: img.startsWith("//") ? "https:" + img : img
+                });
+            }
+        });
+
         return { results };
     }, cacheConfig.key, cacheConfig.duration);
     return c.json({ provider: "Tatakai", status: 200, data });
@@ -275,7 +453,8 @@ watchawRouter.get("/episode", async (c) => {
 
 // ========== ROOT ==========
 watchawRouter.get("/", (c) => {
-    return c.json({ provider: "Tatakai",
+    return c.json({
+        provider: "Tatakai",
         status: 200,
         message: "WatchAnimeWorld Scraper - Multi-Language Dubbed Anime",
         endpoints: {

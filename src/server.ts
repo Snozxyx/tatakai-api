@@ -24,8 +24,9 @@ import { animeyaRouter } from "./routes/animeya/index.js";
 import { animeRouter } from "./routes/anime/index.js";
 import { animeApiRouter } from "./routes/anime-api/index.js";
 import { animelokRouter } from "./routes/animelok/index.js";
-import { desidubanimeRouter } from "./routes/desidubanime/index.js";
-
+import desidubRouter from "./routes/desidubanime/index.js";
+import { aniworldRouter } from "./routes/aniworld/index.js";
+import {aniworld} from "./routes/aniworld/index.js";
 import pkgJson from "../package.json" with { type: "json" };
 
 // API version
@@ -601,6 +602,7 @@ app.get("/", (c) =>
                 animelok: `${BASE_PATH}/animelok`,
                 watchaw: `${BASE_PATH}/watchaw`,
                 desidubanime: `${BASE_PATH}/desidubanime`,
+                aniworld: `${BASE_PATH}/aniworld`,
             },
             meta: `${BASE_PATH}/anime-api`,
             docs: "/docs"
@@ -619,7 +621,9 @@ app.route(`${BASE_PATH}/animeya`, animeyaRouter);
 app.route(`${BASE_PATH}/anime`, animeRouter);
 app.route(`${BASE_PATH}/anime-api`, animeApiRouter);
 app.route(`${BASE_PATH}/animelok`, animelokRouter);
-app.route(`${BASE_PATH}/desidubanime`, desidubanimeRouter);
+app.route(`${BASE_PATH}/desidubanime`, desidubRouter);
+app.route(`${BASE_PATH}/aniworld`, aniworldRouter);
+app.route(`${BASE_PATH}/aniworld`, aniworldRouter);
 
 // ========== ERROR HANDLING ==========
 app.notFound(notFoundHandler);

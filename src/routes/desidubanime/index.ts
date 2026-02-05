@@ -1,262 +1,491 @@
-import { Hono } from "hono";
-import * as cheerio from "cheerio";
-import { cache } from "../../config/cache.js";
-import { log } from "../../config/logger.js";
-import type { ServerContext } from "../../config/context.js";
 
-const desidubanimeRouter = new Hono<ServerContext>();
+import { Hono } from "hono";
+import { type ServerContext } from "../../config/context.js";
+import { log } from "../../config/logger.js";
+import { env } from "../../config/env.js";
+import { cache } from "../../config/cache.js";
+import * as cheerio from "cheerio";
+
+const desidubRouter = new Hono<ServerContext>();
 
 const BASE_URL = "https://www.desidubanime.me";
 const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
-async function fetchHtml(url: string): Promise<string> {
-    log.info(`Fetching: ${url}`);
-    const response = await fetch(url, {
-        headers: {
-            "User-Agent": USER_AGENT,
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-            "Referer": BASE_URL,
-        },
-    });
-    if (!response.ok) {
-        log.error(`Failed to fetch ${url}: ${response.status} ${response.statusText}`);
-        const error = new Error(`Failed to fetch ${url}`);
-        (error as any).status = response.status;
-        throw error;
+async function fetchWithRetry(url: string, options: any = {}, retries = 3) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            const res = await fetch(url, {
+                ...options,
+                signal: AbortSignal.timeout(30000),
+            });
+            if (res.ok) return res;
+            if (res.status === 404) throw new Error("Status 404"); // Don't retry 404s
+            throw new Error(`Status ${res.status}`);
+        } catch (e) {
+            if (i === retries - 1 || (e instanceof Error && e.message === "Status 404")) throw e;
+            await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
+        }
     }
-    return response.text();
+    throw new Error("Failed after retries");
 }
 
-// ========== HOME ==========
-desidubanimeRouter.get("/home", async (c) => {
-    const cacheConfig = c.get("CACHE_CONFIG");
+// Extract next episode estimation text
+function extractNextEpisodeEstimate(html: string, $: cheerio.CheerioAPI): Array<{ lang?: string; server?: string; label: string; iso?: string }> {
+    const estimates: Array<{ lang?: string; server?: string; label: string; iso?: string }> = [];
 
-    const data = await cache.getOrSet(async () => {
-        const html = await fetchHtml(BASE_URL);
-        const $ = cheerio.load(html);
+    // Look for "Estimated the next episode will come at" or similar text
+    const estimateSelectors = [
+        "[class*='estimate']",
+        "[class*='next-episode']",
+        "div:contains('Estimated')",
+        "div:contains('next episode')",
+        "span:contains('Estimated')"
+    ];
 
-        const spotlight: any[] = [];
-        const trending: any[] = [];
-        const latest: any[] = [];
+    for (const selector of estimateSelectors) {
+        $(selector).each((_, el) => {
+            const text = $(el).text().trim();
+            const estimateMatch = text.match(/estimated.*?next.*?episode.*?will.*?come.*?at\s*(.+)/i);
 
-        // Spotlight
-        $(".swiper-slide").each((_, slide) => {
-            const title = $(slide).find("h2 span[data-nt-title], h2 span[data-en-title]").first().text().trim();
-            const description = $(slide).find(".text-\\[13px\\].line-clamp-2").text().trim();
-            const poster = $(slide).find("img").attr("data-src") || $(slide).find("img").attr("src");
-            const link = $(slide).find("a[href*='/anime/']").attr("href");
-            const id = link?.split("/anime/")[1]?.replace(/\/$/, "");
+            if (estimateMatch) {
+                // Try to extract language/server from parent context
+                const parent = $(el).closest("div, section");
+                const serverName = parent.find("button, [class*='server']").first().text().trim();
+                const langText = parent.find("[class*='lang'], [class*='dub']").first().text().trim();
 
-            if (title && id) {
-                const isDub = true;
-                spotlight.push({ id, title, description, poster, url: link, isDub });
-            }
-        });
-
-        // Trending
-        $(".swiper-trending .swiper-slide").each((_, slide) => {
-            const title = $(slide).find("span[data-nt-title], span[data-en-title]").first().text().trim();
-            const poster = $(slide).find("img").attr("data-src") || $(slide).find("img").attr("src");
-            const link = $(slide).find("a").attr("href");
-            const id = link?.split("/anime/")[1]?.replace(/\/$/, "");
-            const rank = $(slide).find("span.absolute").text().trim();
-
-            if (title && id) {
-                trending.push({ id, title, poster, url: link, rank: parseInt(rank) || undefined });
-            }
-        });
-
-        // Latest/Sections
-        $("section").each((_, section) => {
-            const sectionTitle = $(section).find("h2").text().trim();
-            if (sectionTitle.includes("Trending") || sectionTitle.includes("Spotlight")) return;
-
-            const items: any[] = [];
-            $(section).find("li.odd\\:bg-tertiary, .grid div").each((_, item) => {
-                const link = $(item).find("a").attr("href");
-                const title = $(item).find("h3, .dynamic-name").text().trim();
-                const poster = $(item).find("img").attr("data-src") || $(item).find("img").attr("src");
-                const id = link?.split("/anime/")[1]?.replace(/\/$/, "");
-                const ep = $(item).find("span:contains('E ')").text().trim().replace("E ", "");
-
-                if (title && id) {
-                    items.push({ id, title, poster, url: link, latestEpisode: ep ? parseInt(ep) : undefined });
-                }
-            });
-
-            if (items.length > 0) {
-                latest.push({ title: sectionTitle, items });
-            }
-        });
-
-        return { spotlight, trending, latest };
-    }, cacheConfig.key, cacheConfig.duration);
-
-    return c.json({ provider: "Desidubanime", status: 200, data });
-});
-
-// ========== SEARCH ==========
-desidubanimeRouter.get("/search/:query", async (c) => {
-    const cacheConfig = c.get("CACHE_CONFIG");
-    const query = c.req.param("query");
-    const page = c.req.query("page") || "1";
-
-    const data = await cache.getOrSet(async () => {
-        const searchUrl = `${BASE_URL}/page/${page}/?s=${encodeURIComponent(query)}`;
-        const html = await fetchHtml(searchUrl);
-        const $ = cheerio.load(html);
-
-        const results: any[] = [];
-
-        $("div#archive-content article").each((_, article) => {
-            const title = $(article).find("h3, .entry-title").text().trim();
-            const link = $(article).find("a").attr("href");
-            const poster = $(article).find("img").attr("src") || $(article).find("img").attr("data-src");
-            const id = link?.split("/anime/")[1]?.replace(/\/$/, "");
-
-            if (title && link) {
-                const finalId = id || link.split("/").filter(Boolean).pop();
-                results.push({ id: finalId, title, poster, url: link });
-            }
-        });
-
-        return { results, page: parseInt(page), hasNextPage: $(".pagination .next").length > 0 };
-
-    }, cacheConfig.key, cacheConfig.duration);
-
-    return c.json({ provider: "Desidubanime", status: 200, data });
-});
-
-// ========== ANIME INFO ==========
-desidubanimeRouter.get("/anime/:id", async (c) => {
-    const cacheConfig = c.get("CACHE_CONFIG");
-    const id = c.req.param("id");
-
-    const data = await cache.getOrSet(async () => {
-        const url = `${BASE_URL}/anime/${id}/`;
-        const html = await fetchHtml(url);
-        const $ = cheerio.load(html);
-
-        const title = $("h1.entry-title").text().trim();
-        const description = $(".entry-content p").first().text().trim();
-        const poster = $(".entry-content img").first().attr("src");
-
-        const episodes: any[] = [];
-
-        $(".episode-list-display-box .episode-list-item").each((_, item) => {
-            const href = $(item).attr("href");
-            const epNum = $(item).attr("data-episode-search-query");
-            const epTitle = $(item).find(".episode-list-item-title").text().trim();
-            const epUrlId = href?.split("/watch/")[1]?.replace(/\/$/, "");
-
-            if (href && epNum) {
-                episodes.push({
-                    number: parseInt(epNum),
-                    title: epTitle || `Episode ${epNum}`,
-                    url: href,
-                    id: epUrlId
+                estimates.push({
+                    lang: langText || undefined,
+                    server: serverName || undefined,
+                    label: estimateMatch[1].trim(),
+                    iso: undefined // Could parse date if needed
                 });
             }
         });
+    }
 
-        if (episodes.length === 0) {
-            $(".swiper-slide a[href*='/watch/']").each((_, link) => {
-                const href = $(link).attr("href");
-                const text = $(link).find("span").text().trim();
-                if (href) {
-                    const epNumMatch = text.match(/(\d+)/);
-                    const epNum = epNumMatch ? parseInt(epNumMatch[1]) : episodes.length + 1;
-                    episodes.push({
-                        number: epNum,
-                        title: text,
-                        url: href,
-                        id: href.split("/watch/")[1]?.replace(/\/$/, "")
-                    });
-                }
-            });
-        }
+    return estimates;
+}
 
-        const uniqueEpisodes = Array.from(new Map(episodes.map(e => [e.number, e])).values()).sort((a, b) => a.number - b.number);
-
-        return { id, title, description, poster, episodes: uniqueEpisodes };
-    }, cacheConfig.key, cacheConfig.duration);
-
-    return c.json({ provider: "Desidubanime", status: 200, data });
-});
-
-// ========== WATCH ==========
-desidubanimeRouter.get("/watch/:id", async (c) => {
+desidubRouter.get("/home", async (c) => {
     const cacheConfig = c.get("CACHE_CONFIG");
-    const id = c.req.param("id");
 
     try {
-        const data = await cache.getOrSet(async () => {
-            const url = `${BASE_URL}/watch/${id}/`;
-            log.info(`Fetching watch page: ${url}`);
-
-            const html = await fetchHtml(url);
-            log.debug(`Fetched HTML length: ${html.length}`);
-
-            const $ = cheerio.load(html);
-
-            let title = $("h1").text().trim();
-            if (!title) {
-                title = $("title").text().replace(" - Desi Dub Anime", "").trim();
-            }
-            log.debug(`Parsed title: ${title}`);
-
-            const sources: any[] = [];
-
-            // 1. Check for iframes
-            log.debug("Checking for iframes...");
-            $("iframe").each((i, iframe) => {
-                const src = $(iframe).attr("src") || $(iframe).attr("data-src");
-                if (src && !src.includes("google") && !src.includes("disqus")) {
-                    log.debug(`Found iframe source: ${src}`);
-                    sources.push({ url: src, name: "Iframe", type: "iframe" });
-                }
-            });
-
-            // 2. Check for js_configs (Encrypted)
-            log.debug("Checking for js_configs...");
-            let jsConfigMatch: RegExpMatchArray | null = null;
-
-            const scriptTags = $("script");
-            scriptTags.each((i, s) => {
-                try {
-                    const scriptContent = $(s).html();
-                    if (scriptContent && scriptContent.includes("var js_configs")) {
-                        // Safety: Limit search/match to reasonably sized strings if chunk available
-                        // Or just run match
-                        jsConfigMatch = scriptContent.match(/var js_configs\s*=\s*["']([^"']+)["']/);
-                        if (jsConfigMatch) {
-                            log.debug("Found js_configs match.");
-                            return false; // break loop
-                        }
-                    }
-                } catch (err: any) {
-                    log.warn(`Error parsing script ${i}: ${err.message}`);
-                }
-            });
-
-            if (jsConfigMatch) {
-                sources.push({
-                    type: "encrypted",
-                    config: jsConfigMatch[1],
-                    description: "Encrypted player config. Requires decryption (AES/Salted)."
+        const data = await cache.getOrSet(
+            async () => {
+                const response = await fetchWithRetry(BASE_URL, {
+                    headers: { "User-Agent": USER_AGENT },
                 });
-            }
+                const html = await response.text();
+                const $ = cheerio.load(html);
 
-            return { id, title, sources };
-        }, cacheConfig.key, cacheConfig.duration);
+                const featured: any[] = [];
 
-        return c.json({ provider: "Desidubanime", status: 200, data });
-    } catch (e: any) {
-        log.error(`Error in Desidubanime watch handler: ${e.message}`);
-        log.error(e.stack);
-        const status = e.status || 500;
-        return c.json({ provider: "Desidubanime", status, message: e.message || "Internal Server Error" }, status);
+                // Verified selector: .swiper-slide (Spotlight)
+                $(".swiper-slide").each((_, element) => {
+                    // Title logic: h2 > span[data-en-title] or h2
+                    let title = $(element).find("h2 span[data-en-title]").text().trim();
+                    if (!title) title = $(element).find("h2").text().trim();
+
+                    const url = $(element).find("a").attr("href");
+                    const img = $(element).find("img").attr("data-src") || $(element).find("img").attr("src");
+
+                    let slug = "";
+                    if (url) {
+                        const match = url.match(/\/(?:anime|series)\/([^\/]+)\/?$/);
+                        if (match) slug = match[1];
+                    }
+
+                    if (title && slug && url) {
+                        featured.push({
+                            title,
+                            slug,
+                            url,
+                            poster: img,
+                            type: "series"
+                        });
+                    }
+                });
+
+                const uniqueFeatured = Array.from(new Map(featured.map(item => [item.slug, item])).values()).slice(0, 20);
+                return { featured: uniqueFeatured };
+            },
+            cacheConfig.key,
+            cacheConfig.duration
+        );
+
+        return c.json({ provider: "Tatakai", status: 200, data });
+    } catch (error) {
+        // Cast error to safely read message
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        log.error("DesiDubAnime Home Error: " + errorMessage);
+        return c.json({ provider: "Tatakai", status: 500, error: "Failed to fetch data" }, 500);
     }
 });
 
-export { desidubanimeRouter };
+desidubRouter.get("/search", async (c) => {
+    const query = c.req.query("q");
+    if (!query) return c.json({ error: "Query required" }, 400);
+
+    const cacheConfig = c.get("CACHE_CONFIG");
+
+    try {
+        const data = await cache.getOrSet(
+            async () => {
+                // Search is complex on this site (CSR/API protection). 
+                // We attempt standard search URL, but expect mixed results.
+                // Logic kept simple for now; if it fails (CSR), improved logic needed later.
+                const searchUrl = `${BASE_URL}/search?s_keyword=${encodeURIComponent(query)}`;
+                const response = await fetchWithRetry(searchUrl, {
+                    headers: { "User-Agent": USER_AGENT },
+                });
+                const html = await response.text();
+                const $ = cheerio.load(html);
+                const results: any[] = [];
+
+                $("article.post").each((_, element) => {
+                    const title = $(element).find(".entry-title").text().trim();
+                    const url = $(element).find("a.lnk-blk").attr("href");
+                    const img = $(element).find("img").attr("data-src") || $(element).find("img").attr("src");
+
+                    let slug = "";
+                    if (url) {
+                        const match = url.match(/\/(?:anime|series)\/([^\/]+)\/?$/);
+                        if (match) slug = match[1];
+                    }
+
+                    if (title && slug) {
+                        results.push({
+                            title,
+                            slug,
+                            url,
+                            poster: img
+                        });
+                    }
+                });
+                return { results };
+            },
+            cacheConfig.key,
+            cacheConfig.duration
+        );
+
+        return c.json({ provider: "Tatakai", status: 200, data });
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        log.error("DesiDubAnime Search Error: " + errorMessage);
+        return c.json({ provider: "Tatakai", status: 500, error: "Failed to search" }, 500);
+    }
+});
+
+desidubRouter.get("/info/:id", async (c) => {
+    const id = c.req.param("id");
+    const cacheConfig = c.get("CACHE_CONFIG");
+
+    try {
+        const data = await cache.getOrSet(
+            async () => {
+                const url = `${BASE_URL}/anime/${id}/`;
+                const response = await fetchWithRetry(url, {
+                    headers: { "User-Agent": USER_AGENT },
+                });
+                const html = await response.text();
+                const $ = cheerio.load(html);
+
+                const title = $("h1").text().trim();
+                const poster = $(".anime-image img").attr("data-src") || $(".anime-image img").attr("src");
+                const synopsis = $("[data-synopsis]").text().trim();
+
+                const episodes: any[] = [];
+
+                // Primary: swiper carousel
+                $(".swiper-episode-anime .swiper-slide a").each((_, el) => {
+                    try {
+                        const epUrl = $(el).attr("href");
+                        const epTitle = $(el).attr("title");
+                        const epNumStr = $(el).find(".episode-list-item-number").text().trim() ||
+                            $(el).find("span").text().replace("Episode", "").trim();
+
+                        if (epUrl) {
+                            const match = epUrl.match(/\/watch\/([^\/]+)\/?/);
+                            const epId = match ? match[1] : "";
+                            const epImage = $(el).find("img").attr("src") || $(el).find("img").attr("data-src");
+
+                            episodes.push({
+                                id: epId,
+                                number: parseFloat(epNumStr) || 0,
+                                title: epTitle || `Episode ${epNumStr}`,
+                                url: epUrl,
+                                image: epImage
+                            });
+                        }
+                    } catch (error) {
+                        log.warn(`Failed to parse episode: ${error}`);
+                    }
+                });
+
+                // Fallback: episode list display
+                if (episodes.length === 0) {
+                    $(".episode-list-display-box a, a[href*='/watch/']").each((_, el) => {
+                        try {
+                            const epUrl = $(el).attr("href");
+                            if (!epUrl || !epUrl.includes("/watch/")) return;
+
+                            const epNum = $(el).find(".episode-list-item-number").text().trim() ||
+                                $(el).text().match(/episode\s*(\d+)/i)?.[1];
+                            const epTitle = $(el).find(".episode-list-item-title").text().trim() ||
+                                $(el).attr("title") ||
+                                $(el).text().trim();
+
+                            const match = epUrl.match(/\/watch\/([^\/]+)\/?/);
+                            const epId = match ? match[1] : "";
+
+                            if (epId) {
+                                episodes.push({
+                                    id: epId,
+                                    number: parseFloat(epNum || "0"),
+                                    title: epTitle || `Episode ${epNum}`,
+                                    url: epUrl
+                                });
+                            }
+                        } catch (error) {
+                            log.warn(`Failed to parse episode from fallback: ${error}`);
+                        }
+                    });
+                }
+
+                // Extract "More Season" links
+                const seasons: any[] = [];
+                $("a[href*='/anime/']").filter((_, el) => {
+                    const text = $(el).text().toLowerCase();
+                    return text.includes("season") || text.includes("s1") || text.includes("s2");
+                }).each((_, el) => {
+                    try {
+                        const seasonUrl = $(el).attr("href");
+                        const seasonTitle = $(el).text().trim();
+                        const seasonMatch = seasonUrl?.match(/\/anime\/([^\/]+)\/?/);
+                        const seasonSlug = seasonMatch ? seasonMatch[1] : "";
+
+                        if (seasonSlug && seasonTitle) {
+                            seasons.push({
+                                id: seasonSlug,
+                                title: seasonTitle,
+                                url: seasonUrl
+                            });
+                        }
+                    } catch (error) {
+                        log.warn(`Failed to parse season: ${error}`);
+                    }
+                });
+
+                // Extract Downloads (480P, 720P, 1080P Google Drive)
+                const downloads: any[] = [];
+                $("a[href*='drive.google'], a[href*='download']").each((_, el) => {
+                    try {
+                        const downloadUrl = $(el).attr("href");
+                        const qualityText = $(el).text().trim();
+                        const qualityMatch = qualityText.match(/(\d+p|480p|720p|1080p)/i);
+                        const quality = qualityMatch ? qualityMatch[1].toUpperCase() : "Unknown";
+
+                        if (downloadUrl) {
+                            downloads.push({
+                                quality,
+                                url: downloadUrl
+                            });
+                        }
+                    } catch (error) {
+                        log.warn(`Failed to parse download: ${error}`);
+                    }
+                });
+
+                return {
+                    id,
+                    title,
+                    poster,
+                    description: synopsis,
+                    episodes: episodes.sort((a, b) => a.number - b.number),
+                    seasons: seasons.length > 0 ? seasons : undefined,
+                    downloads: downloads.length > 0 ? downloads : undefined
+                };
+            },
+            cacheConfig.key,
+            cacheConfig.duration
+        );
+
+        return c.json({
+            provider: "Tatakai",
+            status: 200,
+            data
+        });
+
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        log.error("DesiDubAnime Info Error: " + errorMessage);
+        return c.json({ provider: "Tatakai", status: 500, error: "Failed to fetch info" }, 500);
+    }
+});
+
+desidubRouter.get("/watch/:id", async (c) => {
+    const id = c.req.param("id");
+    const cacheConfig = c.get("CACHE_CONFIG");
+
+    try {
+        const data = await cache.getOrSet(
+            async () => {
+                log.info(`Fetching Desidubanime watch: ${BASE_URL}/watch/${id}/`);
+                const url = `${BASE_URL}/watch/${id}/`;
+                const response = await fetchWithRetry(url, {
+                    headers: { "User-Agent": USER_AGENT },
+                });
+                const html = await response.text();
+                const $ = cheerio.load(html);
+
+                const sources: any[] = [];
+                const nextEpisodeEstimates: Array<{ lang?: string; server?: string; label: string; iso?: string }> = [];
+
+                // Helper to decode base64 safely
+                const decodeB64 = (str: string) => {
+                    try {
+                        return atob(str);
+                    } catch (e) {
+                        return "";
+                    }
+                };
+
+                // Detect SUB/DUB servers via data-embed-id
+                $("span[data-embed-id]").each((_, el) => {
+                    try {
+                        const embedData = $(el).attr("data-embed-id");
+                        if (!embedData) return;
+
+                        const [b64Name, b64Url] = embedData.split(":");
+                        if (!b64Name || !b64Url) return;
+
+                        const serverName = decodeB64(b64Name);
+                        let finalUrl = decodeB64(b64Url);
+
+                        if (!finalUrl || !serverName) return;
+
+                        // Check if finalUrl is an iframe tag
+                        if (finalUrl.includes("<iframe")) {
+                            const iframeSrc = finalUrl.match(/src=['"]([^'"]+)['"]/)?.[1];
+                            if (iframeSrc) finalUrl = iframeSrc;
+                        }
+
+                        if (finalUrl && !finalUrl.includes("googletagmanager")) {
+                            const isDub = serverName.toLowerCase().includes("dub");
+                            sources.push({
+                                name: serverName.replace(/dub$/i, ""),
+                                url: finalUrl,
+                                quality: "default",
+                                isM3U8: finalUrl.includes(".m3u8"),
+                                isEmbed: !finalUrl.includes(".m3u8"),
+                                category: isDub ? "dub" : "sub",
+                                language: isDub ? "Hindi" : "Japanese"
+                            });
+                        }
+                    } catch (error) {
+                        log.warn(`Failed to parse data-embed-id: ${error}`);
+                    }
+                });
+
+                // Fallback: Primary parsing logic if span[data-embed-id] is missing or incomplete
+                if (sources.length === 0) {
+                    $("button, a, [class*='server']").each((_, el) => {
+                        try {
+                            const text = $(el).text().trim();
+                            const serverNames = ["Mirror", "Stream", "p2p", "Abyss", "V Moly", "CLOUD", "No Ads"];
+                            const serverName = serverNames.find(name => text.includes(name));
+
+                            if (serverName) {
+                                // Get the source URL
+                                const sourceUrl = $(el).attr("data-src") ||
+                                    $(el).attr("data-url") ||
+                                    $(el).attr("href") ||
+                                    $(el).attr("onclick")?.match(/['"](https?:\/\/[^'"]+)['"]/)?.[1];
+
+                                // Check for iframe in same container
+                                const container = $(el).closest("div, section");
+                                const iframe = container.find("iframe").first();
+                                const iframeSrc = iframe.attr("src") || iframe.attr("data-src");
+
+                                let finalUrl = sourceUrl || iframeSrc;
+
+                                if (finalUrl && !finalUrl.includes("googletagmanager") && !finalUrl.includes("cdn-cgi")) {
+                                    sources.push({
+                                        name: serverName,
+                                        url: finalUrl,
+                                        quality: "default",
+                                        isM3U8: finalUrl.includes(".m3u8"),
+                                        isEmbed: true,
+                                        category: "dub", // Default to dub for desidubanime
+                                        language: "Hindi"
+                                    });
+                                }
+                            }
+                        } catch (error) {
+                            log.warn(`Failed to parse server fallback: ${error}`);
+                        }
+                    });
+                }
+
+                // Fallback: extract all iframes
+                if (sources.length === 0) {
+                    $("iframe").each((_, el) => {
+                        try {
+                            const src = $(el).attr("src") || $(el).attr("data-src");
+                            if (src && !src.includes("googletagmanager") && !src.includes("cdn-cgi")) {
+                                sources.push({
+                                    name: "Default",
+                                    url: src,
+                                    quality: "default",
+                                    isM3U8: src.includes(".m3u8"),
+                                    isEmbed: true,
+                                    category: "dub" // Default to dub for desidubanime
+                                });
+                            }
+                        } catch (error) {
+                            log.warn(`Failed to parse iframe: ${error}`);
+                        }
+                    });
+                }
+
+                // Extract next episode estimation
+                const estimates = extractNextEpisodeEstimate(html, $);
+                nextEpisodeEstimates.push(...estimates);
+
+                // Also look for estimation text in page
+                const pageText = $.text();
+                const estimateMatch = pageText.match(/estimated.*?next.*?episode.*?will.*?come.*?at\s*([^\n\r]+)/i);
+                if (estimateMatch && estimates.length === 0) {
+                    nextEpisodeEstimates.push({
+                        label: estimateMatch[1].trim()
+                    });
+                }
+
+                return {
+                    sources,
+                    nextEpisodeEstimates: nextEpisodeEstimates.length > 0 ? nextEpisodeEstimates : undefined,
+                    headers: {
+                        Referer: BASE_URL,
+                        "User-Agent": USER_AGENT
+                    }
+                };
+            },
+            cacheConfig.key,
+            cacheConfig.duration
+        );
+
+        return c.json({
+            provider: "Tatakai",
+            status: 200,
+            data
+        });
+
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        log.error("DesiDubAnime Watch Error: " + errorMessage);
+        const status = errorMessage.includes("Status 404") ? 404 : 500;
+        return c.json({ provider: "Tatakai", status, error: errorMessage.includes("Status 404") ? "Episode not found" : "Failed to fetch stream" }, status);
+    }
+});
+
+export default desidubRouter;
