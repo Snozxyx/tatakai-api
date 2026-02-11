@@ -26,7 +26,6 @@ import { animeApiRouter } from "./routes/anime-api/index.js";
 import { animelokRouter } from "./routes/animelok/index.js";
 import desidubRouter from "./routes/desidubanime/index.js";
 import { aniworldRouter } from "./routes/aniworld/index.js";
-import {aniworld} from "./routes/aniworld/index.js";
 import pkgJson from "../package.json" with { type: "json" };
 
 // API version
