@@ -26,7 +26,8 @@ import { animeApiRouter } from "./routes/anime-api/index.js";
 import { animelokRouter } from "./routes/animelok/index.js";
 import desidubRouter from "./routes/desidubanime/index.js";
 import { aniworldRouter } from "./routes/aniworld/index.js";
-import {aniworld} from "./routes/aniworld/index.js";
+import { toonStreamRouter } from "./routes/toonstream/index.js";
+import { hindiApiRouter } from "./routes/hindiapi/index.js";
 import pkgJson from "../package.json" with { type: "json" };
 
 // API version
@@ -599,6 +600,7 @@ app.get("/", (c) =>
             consumet: `${BASE_PATH}/consumet`,
             regional: {
                 hindiDubbed: `${BASE_PATH}/hindidubbed`,
+                toonstream: `${BASE_PATH}/toonstream`,
                 animelok: `${BASE_PATH}/animelok`,
                 watchaw: `${BASE_PATH}/watchaw`,
                 desidubanime: `${BASE_PATH}/desidubanime`,
@@ -623,7 +625,8 @@ app.route(`${BASE_PATH}/anime-api`, animeApiRouter);
 app.route(`${BASE_PATH}/animelok`, animelokRouter);
 app.route(`${BASE_PATH}/desidubanime`, desidubRouter);
 app.route(`${BASE_PATH}/aniworld`, aniworldRouter);
-app.route(`${BASE_PATH}/aniworld`, aniworldRouter);
+app.route(`${BASE_PATH}/toonstream`, toonStreamRouter);
+app.route(`${BASE_PATH}/hindiapi`, hindiApiRouter);
 
 // ========== ERROR HANDLING ==========
 app.notFound(notFoundHandler);

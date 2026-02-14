@@ -20,6 +20,13 @@ export const ratelimit = rateLimiter({
     windowMs: env.RATE_LIMIT_WINDOW_MS,
 
     keyGenerator(c) {
+        // Prefer Client ID (CID) header for per-device rate limiting
+        const cid = c.req.header("x-client-id");
+        if (cid && cid.length >= 10) {
+            return `cid_${cid}`;
+        }
+
+        // Fallback to IP-based identification
         try {
             const { remote } = getConnInfo(c);
             const key =
@@ -27,7 +34,6 @@ export const ratelimit = rateLimiter({
                 `${String(remote.address)}:${String(remote.port)}`;
             return key;
         } catch {
-            // Fallback to header-based identification
             return (
                 c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
                 c.req.header("x-real-ip") ||

@@ -194,7 +194,48 @@ async function getAnimePage(slug: string): Promise<AnimePageData> {
         }
     });
 
-    const totalEpisodes = servers.filemoon.length + servers.servabyss.length + servers.vidgroud.length;
+    // Consolidate servers into episode-centric structure
+    const episodeMap = new Map<number, { number: number; title: string; servers: Array<{ name: string; url: string; language: string }> }>();
+
+    const processServerList = (list: ServerVideo[], serverName: string) => {
+        list.forEach(item => {
+            let epNum = 0;
+
+            // Handle S{season}E{episode} format (e.g. "S5E12")
+            const seMatch = item.name.match(/S(\d+)E(\d+)/i);
+            if (seMatch) {
+                epNum = parseInt(seMatch[2], 10); // Use EPISODE number, not season
+            } else {
+                const numMatch = item.name.match(/(\d+)/);
+                if (numMatch) {
+                    epNum = parseInt(numMatch[1], 10);
+                } else {
+                    return;
+                }
+            }
+
+            if (!episodeMap.has(epNum)) {
+                episodeMap.set(epNum, {
+                    number: epNum,
+                    title: `Episode ${epNum}`,
+                    servers: []
+                });
+            }
+
+            episodeMap.get(epNum)!.servers.push({
+                name: serverName,
+                url: item.url,
+                language: "Hindi"
+            });
+        });
+    };
+
+    processServerList(servers.filemoon, "Filemoon");
+    processServerList(servers.servabyss, "Servabyss");
+    processServerList(servers.vidgroud, "Vidgroud");
+
+    const episodes = Array.from(episodeMap.values()).sort((a, b) => a.number - b.number);
+    const totalEpisodes = episodes.length;
     log.info(`Found Hindi dubbed anime: ${title} with ${totalEpisodes} total episodes`);
 
     return {
@@ -203,7 +244,7 @@ async function getAnimePage(slug: string): Promise<AnimePageData> {
         thumbnail,
         description,
         rating,
-        servers,
+        episodes,
     };
 }
 
