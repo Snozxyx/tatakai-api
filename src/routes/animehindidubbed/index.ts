@@ -14,17 +14,25 @@ interface ServerVideo {
     url: string;
 }
 
+interface EpisodeServer {
+    name: string;
+    url: string;
+    language: string;
+}
+
+interface Episode {
+    number: number;
+    title: string;
+    servers: EpisodeServer[];
+}
+
 interface AnimePageData {
     title: string;
     slug: string;
     thumbnail?: string;
     description?: string;
     rating?: string;
-    servers: {
-        filemoon: ServerVideo[];
-        servabyss: ServerVideo[];
-        vidgroud: ServerVideo[];
-    };
+    episodes: Episode[];
 }
 
 interface SearchResult {
@@ -135,10 +143,10 @@ async function getAnimePage(slug: string): Promise<AnimePageData> {
         $('meta[property="og:description"]').attr("content");
     const rating = $(".rating, [class*='rating']").first().text().trim();
 
-    const servers: AnimePageData["servers"] = {
-        filemoon: [],
-        servabyss: [],
-        vidgroud: [],
+    const servers = {
+        filemoon: [] as ServerVideo[],
+        servabyss: [] as ServerVideo[],
+        vidgroud: [] as ServerVideo[],
     };
 
     // Extract serverVideos from JavaScript
