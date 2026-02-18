@@ -2,6 +2,12 @@
 
 > Unified Anime API combining HiAnime, regional scrapers, and utility APIs with modern caching, CORS, rate limiting, and logging.
 
+## Social
+> Discord : https://dsc.gg/tatakai
+
+Disclaimer 
+- No other Social Media Handle is availaible right now, If you see then please report us as we only have **discord server** .
+
 ## Features
 
 - 🚀 **Modern Stack**: Built with [Hono](https://hono.dev/) - ultra-fast, lightweight web framework
